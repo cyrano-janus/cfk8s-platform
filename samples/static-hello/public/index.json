@@ -1,0 +1,5 @@
+{
+  "message": "Hallo von nginx auf Korifi",
+  "buildpack": "paketo-buildpacks/web-servers",
+  "hinweis": "statisch ausgeliefert, kein Anwendungsprozess"
+}

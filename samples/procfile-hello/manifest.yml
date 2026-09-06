@@ -1,0 +1,4 @@
+applications:
+- name: procfile-hello
+  memory: 128M
+  instances: 1

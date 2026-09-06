@@ -1,0 +1,12 @@
+# Keine ruby-Version gepinnt: dann trägt Gemfile.lock kein "RUBY VERSION" und
+# das mri-Buildpack darf seinen Default nehmen. Ein Pin hier müsste sonst mit
+# dem Angebot des Buildpacks Schritt halten.
+#
+# puma ist nicht Beiwerk: alle Web-Order-Gruppen des ruby-Buildpacks verlangen
+# einen Server-Buildpack (puma, thin, unicorn, passenger oder rackup) als
+# NICHT-optionales Mitglied. Ohne einen davon greift keine Ruby-Gruppe, und die
+# App fiele im ClusterBuilder auf ein späteres Buildpack durch.
+source "https://rubygems.org"
+
+gem "rack", "~> 3.1"
+gem "puma", "~> 6.4"

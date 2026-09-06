@@ -1,0 +1,4 @@
+applications:
+- name: ruby-hello
+  memory: 256M
+  instances: 1

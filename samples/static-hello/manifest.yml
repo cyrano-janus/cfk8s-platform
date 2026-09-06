@@ -1,0 +1,4 @@
+applications:
+- name: static-hello
+  memory: 128M
+  instances: 1

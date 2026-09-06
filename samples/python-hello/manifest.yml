@@ -1,0 +1,4 @@
+applications:
+- name: python-hello
+  memory: 256M
+  instances: 1

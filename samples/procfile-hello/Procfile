@@ -1,0 +1,5 @@
+# Der Prozesstyp ist hier der ganze Inhalt der App - genau das prüft dieses
+# Sample. python3 liegt im Run-Image (run-jammy-full 0.1.209: bash, sh, python3,
+# nc, perl - kein node, ruby oder php), es wird also kein Sprach-Buildpack
+# gebraucht und keins darf greifen.
+web: exec python3 -m http.server $PORT --bind 0.0.0.0

@@ -1,0 +1,4 @@
+applications:
+- name: nodejs-hello
+  memory: 256M
+  instances: 1

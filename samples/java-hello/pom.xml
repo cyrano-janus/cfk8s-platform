@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Absichtlich ohne Spring Boot: geprüft werden soll das Java-Buildpack, nicht
+     ein Framework. Der HTTP-Server kommt aus dem JDK (com.sun.net.httpserver),
+     damit der Build nur Maven-Plugins lädt und keine Anwendungsabhängigkeiten.
+
+     Der Weg im Buildpack: bellsoft-liberica (JDK/JRE) -> maven (mvn package)
+     -> executable-jar. Letzteres braucht eine Main-Class im Jar-Manifest,
+     genau die setzt maven-jar-plugin unten. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>local.korifi</groupId>
+  <artifactId>java-hello</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <build>
+    <plugins>
+      <!-- Version explizit gepinnt, nicht dem Maven-Default überlassen: ein
+           älteres maven-compiler-plugin (3.1 ist der Default in Maven 3.6)
+           kennt <release> nicht, ignoriert die Property still und kompiliert
+           gegen Source-Level 5 - der Build bricht dann mit "Quelloption 5 wird
+           nicht mehr unterstützt" ab. So baut das Sample gleich, egal welches
+           Maven es baut: das im Buildpack oder eines auf dem Host. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <release>17</release>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.2</version>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>hello.App</mainClass>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

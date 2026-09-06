@@ -1,0 +1,9 @@
+{
+  "name": "nodejs-hello",
+  "version": "1.0.0",
+  "description": "Smoke-Test für paketo-buildpacks/nodejs auf Korifi",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}

@@ -1,0 +1,6 @@
+applications:
+- name: dotnet-hello
+  # 512M: die .NET-Runtime startet in 256M, aber ohne Reserve fuer den ersten
+  # JIT-Durchlauf laeuft der Container Gefahr, beim Start OOM zu gehen.
+  memory: 512M
+  instances: 1

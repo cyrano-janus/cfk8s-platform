@@ -1,0 +1,6 @@
+applications:
+- name: java-hello
+  # 1G ist kein Luxus: der JVM-Memory-Calculator des Buildpacks bricht bei zu
+  # kleinem Limit mit einer Rechnung ab, die nicht aufgeht, statt zu starten.
+  memory: 1G
+  instances: 1
