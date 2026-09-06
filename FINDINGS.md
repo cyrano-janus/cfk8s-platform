@@ -975,3 +975,82 @@ beantworten — `skip_cert_verify: false` setzen und die Plattform-CA in den
 Trust-Store der Cloud-Controller-Pods legen. Dann prüft echter CC-Code ein
 echtes Zertifikat, und das wäre eine belastbare Aussage. Das ist ein möglicher
 nächster Ausbau dieser Plattform, kein Mangel des Brokers.
+
+## #32 — Eine CF-App erreicht die Dienste des Brokers nicht
+
+Der erste echte Konsument — das Lernspiel — bindet eine `cnpg-postgresql`-Instanz
+und kommt nicht an sie heran:
+
+```
+Speicherbank antwortet nicht: dial tcp 10.96.234.25:5432: i/o timeout
+```
+
+Die Adresse stimmt: `10.96.234.25` ist die ClusterIP des CNPG-Service. Der Name
+löst also auf, und die Zugangsdaten sind richtig. **Die Verbindung wird
+blockiert.**
+
+Cloud Foundry schottet Anwendungs-Workloads vom Service-Netz des Clusters ab.
+Ein Pod im Namespace `cf-workloads` erreicht nicht einmal `kube-dns`:
+
+```
+$ kubectl -n cf-workloads run … -- nslookup kubernetes.default.svc.cluster.local
+;; connection timed out; no servers could be reached
+```
+
+**Das ist korrektes Verhalten der Plattform, kein Defekt.** Eine CF-App soll
+nicht im Cluster herumgreifen können. Der Befund liegt bei uns.
+
+### Was daran der Befund ist
+
+**Der Broker gibt Zugangsdaten heraus, die nur innerhalb des Clusters gelten.**
+Der Host im Binding ist der blanke Servicename des Operators:
+
+```
+host: osb-f7d5a9f7-a53b-4308-8218-d2d6806e01f6-rw
+port: 5432
+```
+
+Kein Namespace, kein FQDN, keine von außen erreichbare Adresse. Das kommt so aus
+dem Secret von CloudNativePG, und die Definition reicht es unverändert durch.
+
+**Auf Korifi fiel das nicht auf**, weil dort Anwendungen als Pods im selben
+Cluster liefen und die Abschottung fehlte. Auf einem Zielsystem ist es schlimmer,
+nicht besser: bei Tanzu TAS läuft die Anwendung auf einer BOSH-VM, und der
+Kubernetes-Cluster steht daneben — dort gibt es überhaupt keinen Weg zu einer
+ClusterIP.
+
+### Was es kostet
+
+**Der Broker provisioniert Datenbanken, die eine Cloud-Foundry-Anwendung nicht
+benutzen kann.** Der ganze Lebenszyklus ist grün — `create-service`,
+`bind-service`, Credentials im `VCAP_SERVICES` — und der eigentliche Zweck des
+Bindings wird verfehlt.
+
+Das ist damit gewichtiger als jeder bisher offene Punkt, und es war unsichtbar,
+solange niemand die Zugangsdaten wirklich benutzt hat. Genau dafür war das
+Dogfooding da.
+
+### Was der Weg dorthin verlangt
+
+Drei Ebenen, und keine davon ist allein Broker-Arbeit:
+
+1. **Der Dienst muss außerhalb des Clusters erreichbar sein** — LoadBalancer,
+   NodePort oder ein Gateway mit TCP-Unterstützung. Das entscheidet der
+   Betreiber, nicht der Broker.
+2. **Das Binding muss diese Adresse ausliefern**, nicht die clusterinterne. Das
+   ist Definitionsarbeit (`bind.mapping` schreibt `host` und `uri` um) — und
+   der Broker müsste erfahren, welche Adresse gilt.
+3. **Die Plattform muss den Weg erlauben.** Bei CF ist das eine Frage der
+   Egress-Regeln (`cf security-groups`).
+
+Punkt 3 ist der, den die Entwicklungsplattform hier zusätzlich stellt: selbst
+eine erreichbare Adresse hilft nicht, wenn die Security Group der Anwendung sie
+nicht freigibt.
+
+### Nebenbefund am Konsumenten, nicht an der Plattform
+
+`database/sql` reicht den Kontext beim **ersten** Verbindungsaufbau nicht an
+einen Treiber durch, der nur die alte `Open`-Schnittstelle hat. Ein
+`PingContext` mit Deadline blockiert deshalb, bis das Betriebssystem aufgibt;
+die Frist gehört als `connect_timeout` in die Verbindungs-URI. Auf einer
+abgeschotteten Plattform heißt der Unterschied: Startabbruch statt Fehlermeldung.
