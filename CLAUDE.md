@@ -73,8 +73,20 @@ make conformance  # legt eine echte Instanz an, Minuten
 ## Prüfen
 
 `make verify` ist read-only und läuft in Sekunden — es gehört nach jeder
-Änderung gefahren. `make conformance` legt eine echte Instanz an, bindet,
-aktualisiert und räumt ab; das kostet Minuten und bleibt deshalb getrennt.
+Änderung gefahren. Zwei Läufe kosten Minuten und bleiben deshalb getrennt, und
+sie beantworten **verschiedene** Fragen:
+
+- **`make conformance`** prüft den BROKER. Es spricht direkt mit ihm und sagt,
+  ob er OSB 2.17 einhält — unabhängig von jeder Plattform.
+- **`make cf-smoke`** prüft das ZUSAMMENSPIEL. Es fährt den Lebenszyklus über
+  die echte `cf`-CLI und sagt, ob Cloud Foundry die Zusagen des Brokers so
+  liest, wie er sie meint: erreicht ein `cf update-service -c` den Broker,
+  lehnt der Cloud Controller einen nicht zugesagten Planwechsel selbst ab,
+  wird aus `maintenanceInfo` ein `upgrade available`.
+
+Keiner der beiden beantwortet die Frage des anderen. Wer nur `conformance`
+fährt, weiß nicht, ob die Plattform mitspielt; wer nur `cf-smoke` fährt, weiß
+bei Rot nicht, ob der Broker oder die Plattform schuld ist.
 
 Beide Richtungen des Katalogs werden geprüft: was ausgerollt ist, muss CF
 kennen, **und** was CF kennt, muss ausgerollt sein. Die zweite Richtung fängt

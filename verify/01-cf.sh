@@ -4,8 +4,11 @@ cd "$(dirname "$0")/.." && set -a && . versions.env && set +a && . verify/lib.sh
 echo "Cloud Foundry"
 check "Knoten bereit" "0" \
   "\$K get nodes --no-headers | grep -vc ' Ready '"
+# Terminating zaehlt nicht als Fehler: direkt nach einem Rollout ist der alte
+# Pod noch da, und ein Check, der danach eine halbe Minute rot ist, erzieht
+# zum Wegsehen.
 check "keine Pods außerhalb von Running/Succeeded" "0" \
-  "\$K get pods -A --no-headers | awk '{print \$4}' | grep -vcE '^(Running|Succeeded|Completed)$'"
+  "\$K get pods -A --no-headers | awk '{print \$4}' | grep -vcE '^(Running|Succeeded|Completed|Terminating)$'"
 # Die Komponenten, die den Unterschied zu einem Nachbau ausmachen. capi ist
 # cloud_controller_ng - dieselbe Software, die ein Zielsystem fährt; genau
 # deshalb ist ein Befund hier eine Aussage über das Zielsystem.

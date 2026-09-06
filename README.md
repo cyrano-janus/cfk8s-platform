@@ -42,6 +42,15 @@ make register
 make verify
 ```
 
+Zwei Prüfläufe, die verschiedene Fragen beantworten:
+
+```
+make verify       # read-only, Sekunden — läuft der Aufbau?
+make cf-smoke     # Minuten — liest Cloud Foundry die Zusagen des Brokers so,
+                  #           wie er sie meint?
+make conformance  # Minuten — hält der Broker allein OSB 2.17 ein?
+```
+
 `make help` listet alles. `make status` zeigt den Ist-Zustand, `make stop` und
 `make start` halten den Cluster an und wieder in Gang, ohne etwas zu verlieren.
 

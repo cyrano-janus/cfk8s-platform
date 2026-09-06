@@ -189,6 +189,10 @@ instance-namespace:
 verify:
 	@rc=0; for f in verify/[0-9]*.sh; do bash "$$f" || rc=1; done; exit $$rc
 
+## cf-smoke: der Lebenszyklus ueber die echte cf-CLI (Minuten!)
+cf-smoke:
+	@bash ops/cf-smoke.sh
+
 ## conformance: osb-gate direkt gegen den ausgerollten Broker (Minuten!)
 conformance:
 	@bash ops/conformance.sh
@@ -219,4 +223,4 @@ down: cf-clone
 
 .PHONY: help cf-clone cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace verify conformance stop start status down
+        register unregister instance-namespace verify cf-smoke conformance stop start status down
