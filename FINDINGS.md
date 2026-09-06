@@ -1054,3 +1054,58 @@ einen Treiber durch, der nur die alte `Open`-Schnittstelle hat. Ein
 `PingContext` mit Deadline blockiert deshalb, bis das Betriebssystem aufgibt;
 die Frist gehört als `connect_timeout` in die Verbindungs-URI. Auf einer
 abgeschotteten Plattform heißt der Unterschied: Startabbruch statt Fehlermeldung.
+
+### Nachtrag: die Security Group ist nötig und reicht nicht
+
+Der naheliegende und auf produktivem CF **richtige** Weg ist eine Application
+Security Group. Durchgespielt:
+
+```
+cf create-security-group backing-services rules.json   # 10.96.0.0/16 tcp/5432
+cf bind-running-security-group backing-services        # global
+cf restart letzter-eintrag
+```
+
+**Zwei Zwischenbefunde dabei:**
+
+- **Nur global gebundene Running-Groups werden übersetzt.** Ein
+  `cf bind-security-group … --space spike` erzeugte keine Cilium-Regel; erst
+  `cf bind-running-security-group` ohne Space tat es.
+- Die Regel entsteht dann wirklich: eine `CiliumNetworkPolicy` mit dem Label
+  `rule-name: backing-services`, die Egress auf `10.96.0.0/16` und (nach einem
+  Nachtrag) `10.244.0.0/16` für Port 5432 erlaubt.
+
+**Und die App kommt trotzdem nicht durch.** Nach mehreren Neustarts mit
+nachweislich vorhandener Regel bleibt es bei `i/o timeout`.
+
+Die Erklärung liegt in Ciliums Semantik: **`toCIDR` greift für Ziele
+*außerhalb* des Clusters.** Ein Pod oder eine ClusterIP im selben Cluster trägt
+eine Cluster-Identität, und CIDR-Regeln matchen sie nicht — dafür bräuchte es
+`toEndpoints`. Die ASG-Übersetzung von Cloud Foundry kennt aber nur CIDRs.
+
+**Daraus folgt etwas Grundsätzliches:** auf dieser Plattform kann *keine* ASG
+einen clusterinternen Dienst erreichbar machen. Das ist kein Konfigurationsfehler
+und keine fehlende Zeile — es ist die Bauform.
+
+### Was der Weg wirklich ist
+
+Damit fällt die Antwort mit der zusammen, die auf Tanzu TAS ohnehin gilt:
+
+> **Der Dienst muss an einer Adresse liegen, die für die Anwendung „außen" ist,
+> und das Binding muss genau diese Adresse ausliefern.**
+
+Drei Schritte, und sie verteilen sich sauber entlang des Trennstrichs
+([ADR 0011](../osb-broker-go/docs/de/adr/0011-broker-operator-boundary.md)):
+
+| Schritt | Wessen Arbeit |
+|---|---|
+| Den Dienst je Instanz nach außen legen — `Service` vom Typ `LoadBalancer` neben dem `Cluster`, als zweites Dokument im Provision-Template | **Definition**; die Fähigkeit für mehrteilige Manifeste ist gebaut und hat mit `cnpg-pgvector` einen Nutzer |
+| Die vergebene Adresse ins Binding schreiben statt der ClusterIP | **Broker** — und das ist eine echte Lücke: `bind` liest heute nur ein Secret, nicht das `status` eines anderen Objekts |
+| Diese Adresse per ASG freigeben | **Betreiber**, und dort greift die ASG dann auch, weil die Adresse „außen" ist |
+
+Auf kind fehlt für Schritt 1 eine LoadBalancer-Umsetzung (MetalLB oder
+`cloud-provider-kind`) — Plattformarbeit, kein Broker-Thema.
+
+**Die Lücke im Broker ist Schritt 2** und die einzige, die niemand anders
+schließen kann: eine Definition muss sagen können, dass `host` und `uri` aus dem
+Status eines Objekts kommen und nicht aus dem Secret des Operators.
