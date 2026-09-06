@@ -1,0 +1,10 @@
+# Lokale Secrets und Overrides - niemals committen
+*.local.yaml
+broker/definitions.generated.yaml
+
+# Der geklonte Upstream. Er wird per Commit gepinnt (cf/PINNED), nicht
+# mitversioniert: es ist ein fremdes Repo, kein Teil dieses hier.
+cf/kind-deployment/
+
+# cf-CLI-Artefakte
+.cf/

@@ -1,0 +1,70 @@
+# cfk8s-platform
+
+Entwicklungs- und Testplattform für den OSB-Broker aus
+[`../osb-broker-go`](../osb-broker-go): **echtes Cloud Foundry auf kind**, plus
+die Operatoren, die der Broker bedient.
+
+Cloud Foundry selbst kommt von
+[`cloudfoundry/kind-deployment`](https://github.com/cloudfoundry/kind-deployment) —
+`cloud_controller_ng`, UAA, Diego, gorouter, credhub, loggregator, als
+Helm-Charts auf drei kind-Knoten. Dieses Repo baut das nicht nach, es klont den
+Upstream auf einen gepinnten Commit und ruft ihn auf. Gebaut wird hier alles
+daneben: PKI für Broker-TLS, Service-Operatoren, Broker, Registrierung,
+Akzeptanzprüfungen.
+
+## Warum nicht mehr Korifi
+
+Der Vorgänger fuhr Korifi, einen **Nachbau** der CF-API auf Kubernetes. Zwei
+Gründe für den Wechsel:
+
+- **Korifi ist upstream archiviert** (Cloud Foundry RFC 0060).
+- **Der Nachbau war unvollständig, und zwar an einer Stelle, die zählt.**
+  Korifis OSB-Client kennt kein `PATCH /v2/service_instances/:id`. Damit waren
+  `cf update-service -c`, der Planwechsel und `cf upgrade-service` gar nicht
+  prüfbar — drei Symptome einer fehlenden Methode.
+
+Hier laufen alle drei. Belegt am 2026-09-06: ein Parameter-Update erreicht den
+Broker und ändert die Ressource wirklich; ein nicht zugesagter Planwechsel wird
+vom Cloud Controller mit *„The service does not support changing plans"*
+abgelehnt, ohne den Broker zu fragen; und `cf upgrade-service` hebt eine Instanz
+von `upgrade available: yes` auf `no`.
+
+## Loslegen
+
+```
+make cf-up        # Cloud Foundry (rund 9 Minuten)
+make cf-login
+make deps pki
+make services
+cp broker/values.local.yaml.example broker/values.local.yaml   # Passwort setzen
+make broker
+make register
+make verify
+```
+
+`make help` listet alles. `make status` zeigt den Ist-Zustand, `make stop` und
+`make start` halten den Cluster an und wieder in Gang, ohne etwas zu verlieren.
+
+## Aufbau
+
+| Pfad | Was |
+|---|---|
+| `versions.env` | **Alle** Versionen, einschließlich des gepinnten Upstream-Commits |
+| `cf/` | Der geklonte Upstream (nicht mitversioniert, per Commit gepinnt) |
+| `pki/` | Plattform-CA über cert-manager, für Broker-TLS |
+| `services/*/service.env` | Ein Operator ist ein Verzeichnis mit einer Datei |
+| `broker/` | Chart-Werte; `values.local.yaml` trägt das Passwort und bleibt lokal |
+| `ops/` | Werkzeuge: Katalog abfragen, verwaiste Einträge aufräumen, Konformität, Status |
+| `verify/` | Akzeptanzprüfungen, read-only, Sekunden |
+| `FINDINGS.md` | Das Messprotokoll: Beobachtung, verifizierte Ursache, Vorschlag |
+
+## Was hier belegt wird — und was nicht
+
+**Belegt ist der Protokollvertrag.** `cloud_controller_ng` hier ist dieselbe
+Software wie auf einem Zielsystem; ein Befund über das OSB-Verhalten überträgt
+sich.
+
+**Nicht belegt ist der Betrieb.** Der Broker liegt hier im selben Cluster wie
+CF, auf einem Zielsystem läuft er getrennt. Ziel-Namespace, Vertrauensanker und
+Netzweg bleiben offen — siehe [FINDINGS.md](FINDINGS.md) #30 und #31 und
+[CLAUDE.md](CLAUDE.md).

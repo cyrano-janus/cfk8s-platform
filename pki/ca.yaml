@@ -1,0 +1,52 @@
+# Plattform-eigene CA.
+#
+# Warum überhaupt: der Broker terminiert seit Phase 4.5 selbst TLS, und Korifi
+# validiert Broker-Zertifikate. Für Namen wie *.svc.cluster.local kann keine
+# öffentliche CA ausstellen — also braucht die Plattform eine eigene, der die
+# Korifi-Pods vertrauen (platform/15-pki/korifi-trust.patch.yaml).
+#
+# Alles deklarativ über cert-manager: kein openssl, keine Schlüssel im Repo.
+# Der private Schlüssel entsteht im Cluster und verlässt ihn nicht.
+#
+# Reihenfolge: selbstsignierter Issuer -> CA-Zertifikat -> CA-ClusterIssuer.
+# Der ClusterIssuer liest sein Secret im cert-manager-Namespace, deshalb liegen
+# Issuer und Zertifikat dort und nicht im Broker-Namespace.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: osb-selfsigned
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: osb-platform-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: osb-platform-ca
+  secretName: osb-platform-ca
+  # Lange Laufzeit mit Absicht: rotiert die CA, müssen alle Trust-Stores
+  # nachgezogen werden. Das Broker-Zertifikat darunter rotiert dagegen kurz.
+  duration: 87600h    # 10 Jahre
+  renewBefore: 8760h  # 1 Jahr
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    # Explizit, weil cert-manager den Default in v1.18 gewechselt hat und
+    # sonst bei jedem Apply warnt.
+    rotationPolicy: Always
+  issuerRef:
+    name: osb-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: osb-ca-issuer
+spec:
+  ca:
+    secretName: osb-platform-ca

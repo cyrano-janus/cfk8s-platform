@@ -1,0 +1,4 @@
+# Kopieren nach broker/values.local.yaml und ein Passwort setzen.
+# Die Datei ist in .gitignore und gehört nicht ins Repo.
+auth:
+  password: "hier-ein-eigenes-passwort"

@@ -1,0 +1,77 @@
+# Werte des Brokers für diese Entwicklungsplattform.
+#
+# Was hier steht, gilt NUR hier. Ein Zielsystem bekommt eigene Werte: andere
+# CA, anderer Namespace, andere Kontingente. Die Datei ist deshalb bewusst
+# klein — alles Allgemeine gehört in die Vorgaben des Charts.
+fullnameOverride: osb-broker
+
+image:
+  repository: osb-broker-go
+  tag: dev
+  # Pflicht: das Image kommt über `kind load docker-image` auf die Knoten und
+  # existiert in keiner Registry. Bei Always würde der Pull fehlschlagen.
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 443
+
+# Der Broker terminiert selbst TLS, das Zertifikat stellt die Plattform-CA aus
+# (make pki). Cloud Foundry prüft das Zertifikat eines Brokers - was hier
+# funktioniert, ist genau die Frage, die auf einem Zielsystem als
+# "Vertrauensanker" offensteht.
+tls:
+  enabled: true
+  certManager:
+    enabled: true
+    issuerRef:
+      kind: ClusterIssuer
+      name: osb-ca-issuer
+    duration: 720h        # 30 Tage
+    renewBefore: 240h     # 10 Tage vorher
+
+config:
+  # Der CRD-Store hält den Zustand als eigene Objekte statt in einer
+  # ConfigMap - ein Objekt je Instanz, mit kubectl einsehbar.
+  storeBackend: crd
+  logRequests: true
+
+metrics:
+  enabled: true
+
+auth:
+  create: true
+  username: broker-user
+  # Das Passwort steht in broker/values.local.yaml, nicht hier.
+
+rbac:
+  create: true
+  # Was der Broker an fremden CRDs anfassen darf. Die Liste gehört zu den
+  # ausgerollten Definitions (BROKER_DEFINITIONS in versions.env): ein Recht
+  # zu wenig, und das Provision endet in einem 403, das erst der Anwender
+  # sieht.
+  operatorCRDs:
+    - group: postgresql.cnpg.io
+      # databases: cnpg-pgvector legt neben dem Cluster eine Database an, die
+      # die pgvector-Erweiterung aktiviert. Ein Recht auf clusters deckt sie
+      # nicht - das Provision waere 403.
+      resources: [clusters, databases]
+      verbs: [create, get, list, update, delete]
+    - group: rabbitmq.com
+      resources: [rabbitmqclusters]
+      verbs: [create, get, list, update, delete]
+  # Bind liest die vom Operator erzeugten Credential-Secrets, und die liegen
+  # im Namespace der Instanz, nicht im Namespace des Brokers.
+  secretsAcrossNamespaces: true
+  # Schreibrechte für spec.bind.projectSecret: die rabbitmq-cluster-Definition
+  # legt ihr Binding zusätzlich als spec-konformes Secret ab, damit auch
+  # Kubernetes-Workloads es nutzen können - die sehen die OSB-Antwort nie.
+  projectedBindingSecrets: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
