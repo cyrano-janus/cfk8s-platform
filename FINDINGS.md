@@ -935,9 +935,19 @@ erzeugt. Denkbare Richtungen, alle mit Folgen für die Mandantentrennung:
   Recht, Namespaces zu erzeugen),
 - eine Zuordnung, die der Betreiber pflegt (kein Automatismus, aber explizit).
 
-Bis das entschieden ist, legt diese Plattform den Namespace von Hand an —
-**eine Krücke, keine Lösung**, und sie steht nur deshalb hier, weil ohne sie
-nichts anderes prüfbar wäre.
+**Erledigt am 2026-09-06.** [ADR 0010](../osb-broker-go/docs/de/adr/0010-instance-namespace.md)
+entscheidet es: der Betreiber konfiguriert die Abbildung über ein Template auf
+den Provision-Kontext, Vorgabe ist der feste Namespace `osb-instances`, und der
+Broker legt keinen an. `make instance-namespace` legt ihn an, die Krücke
+`make space-namespace` ist entfallen. Live belegt: `cf create-service` legt den
+Cluster in `osb-instances` an, ohne dass jemand vorher einen Space-Namespace
+erzeugt hätte.
+
+**Der Live-Lauf zeigte dabei einen Fehler, den kein Test hatte:** das Leserecht
+auf Namespaces hing am selben Schalter wie das Anlegen, der Broker konnte in
+der Vorgabe nicht einmal prüfen und scheiterte mit `Forbidden`. `get` gilt
+jetzt immer, und ein verweigertes Lesen lässt die Prüfung aus statt
+abzulehnen — es ist kein Beweis, dass etwas fehlt.
 
 Der Befund ist der erste Ertrag des Plattformwechsels: auf Korifi war er
 unsichtbar, weil Korifi genau die Voraussetzung schuf, die ein Zielsystem nicht

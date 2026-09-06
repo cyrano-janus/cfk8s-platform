@@ -92,7 +92,7 @@ services:
 # ---------------------------------------------------------------- Broker
 
 ## broker: Image bauen, laden, CRDs, Definitions und Rollout in einem
-broker: broker-image broker-crds broker-definitions broker-deploy
+broker: broker-image broker-crds broker-definitions instance-namespace broker-deploy
 
 ## broker-image: Image bauen und in den kind-Cluster laden
 broker-image:
@@ -175,20 +175,13 @@ register:
 unregister:
 	@cf delete-service-broker $(BROKER_NAME) -f
 
-## space-namespace: Namespace für den Prüf-Space anlegen (Krücke, siehe FINDINGS #30)
-space-namespace:
-	@# **Das ist keine Lösung.** Der Broker leitet den Namespace der
-	@# Operator-Ressourcen aus der Space-GUID ab - eine Annahme, die auf Korifi
-	@# aufging, weil Korifi je Space einen Namespace anlegte. Echtes Cloud
-	@# Foundry kennt keine Namespaces; auf einem Zielsystem existiert er nie.
-	@#
-	@# Bis die Namespace-Strategie entschieden ist (FINDINGS #30), legt dieses
-	@# Target ihn von Hand an - nur damit ueberhaupt etwas anderes pruefbar ist.
-	@# Wer es fuer die Loesung haelt, baut auf einer Kruecke weiter.
-	@guid=$$(cf space $(CF_SPACE) --guid | tr -d '\r\n'); \
-	 test -n "$$guid" || { echo "kein Space $(CF_SPACE) - vorher 'make cf-login'"; exit 1; }; \
-	 $(KUBECTL) create namespace "$$guid" --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null; \
-	 echo "   Namespace $$guid angelegt (Kruecke, FINDINGS #30)"
+## instance-namespace: den Namespace anlegen, in dem die Instanzen liegen
+instance-namespace:
+	@# Der Broker legt ihn nicht selbst an (ADR 0010): er entfernte ihn nie
+	@# wieder, weil OSB nur das Loeschen einer INSTANZ kennt und nicht das Ende
+	@# eines Mandanten. Also legt ihn der Betreiber an - einmal.
+	@$(KUBECTL) create namespace $(INSTANCE_NAMESPACE) --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
+	@echo "   Namespace $(INSTANCE_NAMESPACE) da"
 
 # ---------------------------------------------------------------- Prüfen
 
@@ -226,4 +219,4 @@ down: cf-clone
 
 .PHONY: help cf-clone cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister space-namespace verify conformance stop start status down
+        register unregister instance-namespace verify conformance stop start status down

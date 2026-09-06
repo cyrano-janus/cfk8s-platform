@@ -35,6 +35,14 @@ config:
   # ConfigMap - ein Objekt je Instanz, mit kubectl einsehbar.
   storeBackend: crd
   logRequests: true
+  # Wohin die Ressourcen einer Instanz gehoeren (ADR 0010). Die Vorgabe des
+  # Charts, hier ausdruecklich hingeschrieben: dieser Name muss mit
+  # INSTANCE_NAMESPACE in versions.env uebereinstimmen, sonst legt
+  # `make instance-namespace` einen anderen an als der Broker benutzt.
+  instanceNamespaceTemplate: "osb-instances"
+  # Der Betreiber legt den Namespace an, nicht der Broker - er entfernte ihn
+  # nie wieder.
+  instanceNamespaceCreate: false
 
 metrics:
   enabled: true
