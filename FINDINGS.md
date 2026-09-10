@@ -1109,3 +1109,60 @@ Auf kind fehlt für Schritt 1 eine LoadBalancer-Umsetzung (MetalLB oder
 **Die Lücke im Broker ist Schritt 2** und die einzige, die niemand anders
 schließen kann: eine Definition muss sagen können, dass `host` und `uri` aus dem
 Status eines Objekts kommen und nicht aus dem Secret des Operators.
+
+### Nachtrag: der vorgeschlagene Schritt 1 trägt nicht — gemessen
+
+Die Tabelle oben behauptet, eine LoadBalancer-Adresse sei für die Anwendung
+„außen", und die ASG greife dann. **Das stimmt nicht.** Nachgemessen mit
+Ciliums Drop-Monitor, während die App beide Adressen anspricht:
+
+```
+drop (Policy denied) flow 0x545495c5 ... file bpf_lxc.c:1370,
+  identity 59404->1446: 10.244.2.207:47578 -> 10.244.1.62:5432 tcp SYN
+```
+
+Für die ClusterIP **und** für die LoadBalancer-IP `172.18.255.200` entsteht
+dieselbe Zeile. Cilium löst den Service auf die Backend-Pod-IP auf, **bevor**
+es die Regel auswertet, und prüft dann gegen die *Endpunkt-Identität* des
+Ziel-Pods (`1446`). Eine CIDR-Regel kann eine Endpunkt-Identität nie treffen.
+
+Der `ipcache` zeigt, warum der Umweg über eine andere Adresse nichts hilft:
+
+| Adresse | Identität | Bedeutung |
+|---|---|---|
+| `10.96.234.25` (ClusterIP) | `16777235` | CIDR-Identität — aber vor der Prüfung wegübersetzt |
+| `172.18.255.200` (LoadBalancer) | `16777265` | dasselbe |
+| `10.244.1.62` (Backend-Pod) | `1446` | Endpunkt-Identität — **das ist, wogegen geprüft wird** |
+| `172.18.0.4` (Knoten) | `6` | `reserved:remote-node`, nie von einer CIDR-Regel getroffen |
+| `1.1.1.1` | `16777223` | echtes „außen" — dorthin kommt die App durch |
+
+Belegt ist damit auch die Gegenrichtung: die App erreicht `1.1.1.1:443`. Die
+CIDR-Maschinerie funktioniert also; sie kann nur kein Ziel im selben Cluster
+adressieren.
+
+**Daraus folgt:** LB-IPAM auf kind zu installieren wäre vergebliche Arbeit
+gewesen. Cilium bringt es ohnehin mit (`enable-lb-ipam=true`, Pool angelegt,
+Adresse vergeben) — es ändert am Ergebnis nichts.
+
+### Was stattdessen gebaut wurde
+
+`network/backing-services-egress.yaml`: eine `CiliumClusterwideNetworkPolicy`,
+die den Weg über **Identitäten** statt über Adressen erlaubt — CF-Anwendungen
+(`workload-type: app` in `cf-workloads`) dürfen Endpunkte in `osb-instances`
+auf 5432/5672/15672 erreichen. Anzuwenden mit `make network`.
+
+Gegenprobe gelaufen: ohne die Regel meldet das Spiel nach 30 s
+`GEDÄCHTNIS FLÜCHTIG`, mit ihr `GEDÄCHTNIS DAUERHAFT`. Rätsel 1 ist damit auf
+der Plattform lösbar; der Rechner nennt seinen Namen und das Archiv öffnet.
+
+**Der Befund bleibt trotzdem offen.** Die Regel behebt nichts, sie macht den
+Defekt hier nur unsichtbar: der Broker liefert weiterhin eine clusterinterne
+Adresse aus, und auf Tanzu TAS — Anwendung auf einer BOSH-VM, Cluster daneben —
+führt dorthin kein Weg. Offen ist damit die Frage, die vorher hinter Schritt 1
+verborgen lag:
+
+> **Soll der Dienst wirklich außerhalb des Clusters liegen?** Das verlangt einen
+> Weiterleiter *außerhalb* von Kubernetes (ein Prozess oder Container am
+> kind-Docker-Netz, der auf den NodePort zeigt) — erst dann ist die Adresse für
+> Cilium „außen", und erst dann greift die ASG. Das ist eine Entscheidung über
+> die Bauform der Entwicklungsplattform, keine Zeile Konfiguration.

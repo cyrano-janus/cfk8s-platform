@@ -38,9 +38,16 @@ make deps pki
 make services
 cp broker/values.local.yaml.example broker/values.local.yaml   # Passwort setzen
 make broker
+make network      # sonst erreicht keine App ihren gebundenen Dienst
 make register
 make verify
 ```
+
+`make network` ist keine Kür. Eine Application Security Group kann den Weg von
+einer CF-Anwendung zu einem Dienst **im selben Cluster** nicht öffnen: Cilium
+prüft gegen die Endpunkt-Identität des Ziel-Pods, und eine CIDR-Regel trifft
+die nie. Warum das so ist und was daraus folgt, steht in
+[`network/README.md`](network/README.md) und in `FINDINGS.md` #32.
 
 Zwei Prüfläufe, die verschiedene Fragen beantworten:
 

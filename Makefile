@@ -197,6 +197,15 @@ instance-namespace:
 	@$(KUBECTL) create namespace $(INSTANCE_NAMESPACE) --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	@echo "   Namespace $(INSTANCE_NAMESPACE) da"
 
+## network: Egress-Regel, die eine ASG hier nicht leisten kann (network/README.md)
+network:
+	@# Cilium prueft gegen die Endpunkt-Identitaet des Ziel-Pods, nicht gegen
+	@# die Service-Adresse. Eine ASG kennt nur CIDRs und kann diesen Weg
+	@# deshalb nicht oeffnen - auch nicht ueber einen LoadBalancer. Gemessen
+	@# in FINDINGS #32.
+	@$(KUBECTL) apply -f network/backing-services-egress.yaml >/dev/null
+	@echo "   Egress cf-workloads -> $(INSTANCE_NAMESPACE) erlaubt"
+
 ## security-groups: Application Security Groups aus security-groups/ anwenden
 security-groups:
 	@# Eine ASG, die nur im Cluster steht, ist nach dem naechsten Neuaufbau weg.
@@ -271,4 +280,4 @@ down: cf-clone
 
 .PHONY: help cf-clone cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace security-groups cf-tools verify verify-restart cf-smoke conformance stop start status down
+        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status down

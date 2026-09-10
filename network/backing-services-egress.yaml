@@ -1,0 +1,55 @@
+# Egress von CF-Anwendungen zu den Instanzen des Brokers.
+#
+# WARUM DAS HIER STEHT UND NICHT IN EINER SECURITY GROUP
+#
+# Eine Application Security Group kann diesen Weg auf dieser Plattform nicht
+# oeffnen - nicht wegen einer fehlenden Zeile, sondern wegen der Bauform.
+# Gemessen (FINDINGS #32):
+#
+#   drop (Policy denied) identity 59404->1446:
+#     10.244.2.207 -> 10.244.1.62:5432 tcp SYN
+#
+# Cilium loest den Service auf die Backend-Pod-IP auf, BEVOR es die Regel
+# auswertet, und prueft dann gegen die Endpunkt-Identitaet des Ziel-Pods
+# (hier 1446). Eine CIDR-Regel kann eine Endpunkt-Identitaet nie treffen; die
+# ASG-Uebersetzung von Cloud Foundry kennt aber nur CIDRs. Das gilt fuer die
+# ClusterIP und - nachgemessen - genauso fuer eine LoadBalancer-Adresse.
+#
+# Also erlaubt es der Betreiber direkt, ueber Identitaeten statt ueber Adressen.
+#
+# DAS IST EINE EIGENHEIT DIESER ENTWICKLUNGSPLATTFORM, KEIN VORBILD.
+# Auf Tanzu TAS stellt sich die Frage nicht: dort laeuft die Anwendung auf einer
+# BOSH-VM, der Dienst liegt wirklich ausserhalb, und die ASG greift. Dass der
+# Broker eine clusterinterne Adresse ausliefert, bleibt dort ein Defekt - diese
+# Regel behebt ihn nicht, sie macht ihn hier nur unsichtbar. Deshalb bleibt
+# FINDINGS #32 offen.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: cf-apps-to-backing-services
+spec:
+  description: >-
+    CF-Anwendungen duerfen die Backing Services des Brokers erreichen.
+    Ersetzt keine ASG, sondern schliesst die Luecke, die die ASG-Uebersetzung
+    auf dieser Plattform nicht schliessen kann.
+  # Nur laufende Anwendungen. Staging-Container (workload-type != app) bauen
+  # ein Droplet und haben in einer Datenbank nichts zu suchen; die ASG bindet
+  # aus demselben Grund nur die Running-Gruppe.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: cf-workloads
+      cloudfoundry.org/workload-type: app
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: osb-instances
+      toPorts:
+        - ports:
+            # Genau die Ports, die auch security-groups/backing-services.json
+            # nennt. Wer dort einen ergaenzt, ergaenzt ihn hier.
+            - port: "5432"    # PostgreSQL (cnpg-postgresql, cnpg-pgvector)
+              protocol: TCP
+            - port: "5672"    # AMQP (rabbitmq-cluster)
+              protocol: TCP
+            - port: "15672"   # RabbitMQ Management
+              protocol: TCP
