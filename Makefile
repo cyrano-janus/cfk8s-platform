@@ -47,8 +47,22 @@ cf-clone:
 	@cd $(CF_DIR) && git fetch -q origin && git checkout -q $(CF_KIND_COMMIT)
 	@echo "   $(CF_DIR) auf $(CF_KIND_COMMIT)"
 
+## cf-tools: Werkzeuge nachlegen, die der Upstream braucht, aber nicht mitbringt
+cf-tools: cf-clone
+	@# Der Upstream installiert kind, kubectl und crane selbst in sein bin/ -
+	@# yq aber nicht, obwohl upload_buildpacks.sh es benutzt. Ohne yq bricht
+	@# `make cf-up` mittendrin ab: der Cluster steht dann, die Buildpacks
+	@# fehlen, und das faellt erst beim ersten `cf push` auf.
+	@if [ ! -x $(CF_DIR)/bin/yq ]; then \
+	   echo ">> yq $(YQ_VERSION) nach $(CF_DIR)/bin"; \
+	   mkdir -p $(CF_DIR)/bin; \
+	   curl -sSL -o $(CF_DIR)/bin/yq \
+	     https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_linux_amd64; \
+	   chmod +x $(CF_DIR)/bin/yq; \
+	 else echo "   yq vorhanden"; fi
+
 ## cf-up: Cloud Foundry hochziehen (Minuten!) und Buildpacks laden
-cf-up: cf-clone
+cf-up: cf-clone cf-tools
 	@echo ">> Cloud Foundry auf kind ($(KIND_CLUSTER_NAME))"
 	@$(MAKE) -C $(CF_DIR) up
 	@$(MAKE) -C $(CF_DIR) bootstrap
@@ -183,11 +197,34 @@ instance-namespace:
 	@$(KUBECTL) create namespace $(INSTANCE_NAMESPACE) --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	@echo "   Namespace $(INSTANCE_NAMESPACE) da"
 
+## security-groups: Application Security Groups aus security-groups/ anwenden
+security-groups:
+	@# Eine ASG, die nur im Cluster steht, ist nach dem naechsten Neuaufbau weg.
+	@# Gebunden wird GLOBAL: eine space-gebundene Running-Group wird hier nicht
+	@# in eine CiliumNetworkPolicy uebersetzt (siehe security-groups/README.md).
+	@for f in security-groups/*.json; do \
+	   name=$$(basename "$$f" .json); \
+	   if cf security-groups 2>/dev/null | awk '{print $$1}' | grep -qx "$$name"; then \
+	     cf update-security-group "$$name" "$$f" >/dev/null; echo "   aktualisiert: $$name"; \
+	   else \
+	     cf create-security-group "$$name" "$$f" >/dev/null; echo "   angelegt: $$name"; \
+	   fi; \
+	   cf bind-running-security-group "$$name" >/dev/null; \
+	 done
+	@echo "   global gebunden. Wirkt fuer laufende Apps erst nach einem Neustart."
+
 # ---------------------------------------------------------------- Prüfen
 
 ## verify: alle Akzeptanz-Checks der Reihe nach (read-only, Sekunden)
 verify:
-	@rc=0; for f in verify/[0-9]*.sh; do bash "$$f" || rc=1; done; exit $$rc
+	@# 06 bleibt draussen: es prueft den Neustartvertrag und duldet dabei eine
+	@# abgelaufene CF-Sitzung. In der taeglichen Pruefung waere diese Nachsicht
+	@# falsch.
+	@rc=0; for f in verify/0[1-5]*.sh; do bash "$$f" || rc=1; done; exit $$rc
+
+## verify-restart: nach `make start` - ist wirklich alles wiedergekommen?
+verify-restart:
+	@bash verify/06-restart.sh
 
 ## cf-smoke: der Lebenszyklus ueber die echte cf-CLI (Minuten!)
 cf-smoke:
@@ -208,6 +245,17 @@ stop:
 ## start: angehaltenen Cluster hochfahren
 start:
 	@for n in $$(docker ps -aq --filter "name=$(KIND_CLUSTER_NAME)-"); do docker start $$n >/dev/null; done
+	@# **Erst auf die API warten, dann auf die Knoten.** Direkt nach dem Start
+	@# antwortet der API-Server schon, autorisiert aber noch nicht: der erste
+	@# Zugriff kommt als "nodes is forbidden" zurueck, nicht als
+	@# "connection refused". Wer darauf abbricht, haelt einen Cluster fuer
+	@# kaputt, der zehn Sekunden spaeter laeuft.
+	@echo ">> warte auf die API"
+	@for i in $$(seq 1 60); do \
+	   $(KUBECTL) get nodes >/dev/null 2>&1 && break; \
+	   [ $$i = 60 ] && { echo "   API antwortet nicht"; exit 1; }; \
+	   sleep 5; \
+	 done
 	@echo ">> warte auf die Knoten"
 	@$(KUBECTL) wait --for=condition=Ready node --all --timeout=5m
 	@echo ">> warte auf die CF-Komponenten"
@@ -223,4 +271,4 @@ down: cf-clone
 
 .PHONY: help cf-clone cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace verify cf-smoke conformance stop start status down
+        register unregister instance-namespace security-groups cf-tools verify verify-restart cf-smoke conformance stop start status down

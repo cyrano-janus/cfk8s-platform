@@ -7,8 +7,18 @@ check "Knoten bereit" "0" \
 # Terminating zaehlt nicht als Fehler: direkt nach einem Rollout ist der alte
 # Pod noch da, und ein Check, der danach eine halbe Minute rot ist, erzieht
 # zum Wegsehen.
-check "keine Pods außerhalb von Running/Succeeded" "0" \
-  "\$K get pods -A --no-headers | awk '{print \$4}' | grep -vcE '^(Running|Succeeded|Completed|Terminating)$'"
+#
+# Gemeldet werden die NAMEN, nicht eine Zahl: "erwartet 0, erhalten 2" schickt
+# den Betreiber auf dieselbe Suche, die der Check gerade gemacht hat.
+#
+# Direkt nach `make start` ist hier oefter etwas rot, das sich von selbst
+# faengt - nfsbroker etwa brauchte fuenf Neustarts. Das ist kein Grund fuer eine
+# Ausnahme im Check, sondern einer, ihn ein paar Minuten spaeter noch einmal zu
+# fahren.
+lahm=$($K get pods -A --no-headers 2>/dev/null \
+  | grep -vE ' (Running|Succeeded|Completed|Terminating) ' \
+  | awk '{print $2"("$4")"}' | tr '\n' ' ' | sed 's/ $//')
+check "keine Pods außerhalb von Running/Succeeded" "" "printf '%s' \"\$lahm\""
 # Die Komponenten, die den Unterschied zu einem Nachbau ausmachen. capi ist
 # cloud_controller_ng - dieselbe Software, die ein Zielsystem fährt; genau
 # deshalb ist ein Befund hier eine Aussage über das Zielsystem.
@@ -32,4 +42,16 @@ if [ "$version" = "True" ] || [ "$version" = "true" ]; then
 else
   pass "CF ist das Original, kein Nachbau"
 fi
+# Ohne Buildpacks ist kein `cf push` moeglich, und das faellt sonst erst an
+# einem fehlgeschlagenen Staging auf: "missing flag: -buildpackOrder" nennt
+# weder die Ursache noch den Weg. `make cf-up` laedt sie, aber wer den Cluster
+# von Hand hochgezogen hat, hat sie nicht.
+buildpacks=$(cf curl /v3/buildpacks 2>/dev/null | python3 -c '
+import json,sys
+try: d=json.load(sys.stdin)
+except Exception: raise SystemExit
+print(" ".join(r["name"] for r in d.get("resources",[])))' 2>/dev/null)
+for b in go_buildpack binary_buildpack; do
+  contains "Buildpack vorhanden: $b" "$b" "printf '%s' \"\$buildpacks\""
+done
 finish

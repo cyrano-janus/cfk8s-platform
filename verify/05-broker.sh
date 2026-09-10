@@ -17,6 +17,12 @@ for f in services/*/service.env; do
     exit $FAILED ) || FAILED=1
 done
 
+# Er wird von `make instance-namespace` angelegt und von niemandem sonst. Fehlt
+# er, scheitert jedes Provision - und zwar mit einer Meldung des Brokers, die
+# zwar den Namen nennt, aber den Betreiber nicht auf sein eigenes Target stösst.
+check "Namespace der Instanzen vorhanden" "$INSTANCE_NAMESPACE" \
+  "\$K get namespace $INSTANCE_NAMESPACE -o jsonpath='{.metadata.name}'"
+
 check "Broker-Service auf 443" "443" \
   "\$K -n $BROKER_NAMESPACE get svc $BROKER_FULLNAME -o jsonpath='{.spec.ports[0].port}'"
 

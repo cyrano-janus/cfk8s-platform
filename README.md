@@ -51,8 +51,20 @@ make cf-smoke     # Minuten — liest Cloud Foundry die Zusagen des Brokers so,
 make conformance  # Minuten — hält der Broker allein OSB 2.17 ein?
 ```
 
-`make help` listet alles. `make status` zeigt den Ist-Zustand, `make stop` und
-`make start` halten den Cluster an und wieder in Gang, ohne etwas zu verlieren.
+`make help` listet alles. `make status` zeigt den Ist-Zustand.
+
+## Anhalten und wieder starten
+
+```
+make stop            # gibt rund 6 GiB Speicher frei, verliert nichts
+make start           # rund zwei Minuten
+make verify-restart  # ist wirklich alles wiedergekommen?
+```
+
+**Ein paar Minuten Geduld nach `make start`.** Einzelne Komponenten und die
+CF-Anwendungen brauchen Anläufe — `nfsbroker` etwa fing sich beim fünften
+Neustart, eine gepushte App war nach wenigen Minuten wieder da. Wer sofort
+prüft, sieht Rot, das keines ist.
 
 ## Aufbau
 

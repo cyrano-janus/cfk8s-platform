@@ -1,0 +1,14 @@
+[
+  {
+    "protocol": "tcp",
+    "destination": "10.96.0.0/16",
+    "ports": "5432,5672,15672",
+    "description": "Service-Netz des Clusters: PostgreSQL und RabbitMQ"
+  },
+  {
+    "protocol": "tcp",
+    "destination": "10.244.0.0/16",
+    "ports": "5432,5672,15672",
+    "description": "Pod-Netz: Cilium loest die ClusterIP vor der Regelauswertung auf die Backend-Pod-IP auf"
+  }
+]
