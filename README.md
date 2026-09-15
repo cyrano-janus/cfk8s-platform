@@ -73,6 +73,18 @@ CF-Anwendungen brauchen Anläufe — `nfsbroker` etwa fing sich beim fünften
 Neustart, eine gepushte App war nach wenigen Minuten wieder da. Wer sofort
 prüft, sieht Rot, das keines ist.
 
+**Nach einem ungeplanten Neustart des Wirts gilt das Gegenteil:**
+
+```
+make netz-reparieren
+```
+
+Docker vergibt den Knoten-Containern dann neue Adressen, Cilium findet die
+Knoten nicht wieder, und keine CF-Komponente löst mehr einen Namen auf. Das
+sieht aus wie Anlaufschwierigkeiten, ist aber stabil falsch und heilt **nicht**
+durch Warten — gemessen acht Stunden und über 350 Neustarts lang (FINDINGS #33).
+Wer hier Geduld übt, übt sie unbegrenzt.
+
 ## Aufbau
 
 | Pfad | Was |

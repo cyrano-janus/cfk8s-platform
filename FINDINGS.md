@@ -1166,3 +1166,79 @@ verborgen lag:
 > kind-Docker-Netz, der auf den NodePort zeigt) — erst dann ist die Adresse für
 > Cilium „außen", und erst dann greift die ASG. Das ist eine Entscheidung über
 > die Bauform der Entwicklungsplattform, keine Zeile Konfiguration.
+
+---
+
+## #33 — Nach einem Neustart des *Wirts* findet Cilium die Knoten nicht wieder
+
+Aufgenommen am 2026-09-15. Andere Quelle als #12: der stammt aus einem geordneten
+`make stop`/`make start`, dieser aus einem **ungeplanten Neustart der Maschine**.
+
+**Beobachtung:** Acht Stunden nach dem Hochfahren steht die Plattform immer noch
+nicht. 15 Pods in `CrashLoopBackOff`, 5 in `Error`; `cf` scheitert schon an der
+Anmeldung, nicht erst an einem Befehl:
+
+```
+$ cf apps
+Post "https://login.cf.127-0-0-1.nip.io/oauth/token": EOF
+```
+
+Die Abstürze haben alle dieselbe Form — UAA, Cloud Controller, BBS, Auctioneer,
+credhub, istio-gateway:
+
+```
+lookup nats.cf-system.svc.cluster.local: i/o timeout
+```
+
+`postgresql-0`, `nats-0` und `minio` laufen. Der Unterschied ist nicht Glück:
+sie brauchen beim Start keine Namensauflösung.
+
+**Ursache, verifiziert in drei Schritten.** Erstens, es ist wirklich DNS und
+nicht die Komponente — aus einem Pod auf dem Worker:
+
+```
+$ kubectl -n cf-system exec nats-0 -c nats -- getent hosts postgresql.cf-system.svc.cluster.local
+(leer, Exit 2)
+```
+
+Zweitens, es ist die Strecke zwischen den Knoten: alle `cf-system`-Pods liegen
+auf `10.244.1.x` (Worker), CoreDNS auf `10.244.0.x` (Control-Plane), und der
+Cilium-Agent des Workers meldet
+
+```
+Routing:          Network: Tunnel [vxlan]   Host: Legacy
+Cluster health:   1/3 reachable
+```
+
+Drittens die Wurzel, im Agenten der Control-Plane:
+
+```
+error in controller sync-to-k8s-ciliumendpoint: endpoint sync cannot take
+ownership of CEP that is not local: CEP's pod "coredns-974585954-jnn4j",
+pod's hostIP "172.18.0.9", cilium nodeIP "172.18.0.8"
+```
+
+**Docker hat die Knoten-Adressen beim Neustart neu vergeben.** Die Control-Plane
+hieß vorher `172.18.0.9` und heißt jetzt `172.18.0.8`. Die CiliumEndpoint- und
+CiliumNode-Objekte tragen noch die alte, der VXLAN-Tunnel formt sich deshalb nie
+neu, und ohne Tunnel erreicht kein Pod auf dem Worker das CoreDNS auf der
+Control-Plane.
+
+**Warum Warten nicht hilft.** README sagt für `make start`: „Ein paar Minuten
+Geduld, einzelne Komponenten brauchen Anläufe." Das gilt hier **nicht**. Der
+Zustand ist stabil falsch — nach acht Stunden und über 350 Neustarts des Cloud
+Controllers stand er unverändert. Wer nur wartet, wartet unbegrenzt.
+
+**Behebung:** die Cilium-Agenten und CoreDNS neu starten, damit sie sich mit den
+aktuellen Knoten-Adressen registrieren. Jetzt `make netz-reparieren`.
+
+Gegenprobe gelaufen: unmittelbar danach löst `getent hosts` aus demselben
+Worker-Pod wieder auf (`10.96.179.158`), und die CF-Komponenten kamen ohne
+weiteres Zutun hoch. Über fünf Minuten gemessen: **kein einziger Neustart** in
+allen 34 Pods, alle bereit — `policy-server` eingeschlossen, der als letzter
+zurückkam und den man auf halbem Weg für einen eigenen Defekt halten kann.
+
+**Was das über ein Zielsystem sagt: nichts.** Der Befund fällt ganz in die
+Betriebshälfte. Kein TAS läuft auf kind, und keine BOSH-VM bekommt beim Neustart
+des Wirts eine neue Adresse von Docker. Er steht hier, weil er die
+Entwicklungsplattform acht Stunden gekostet hat, nicht als Aussage über CF.

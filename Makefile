@@ -270,6 +270,33 @@ start:
 	@echo ">> warte auf die CF-Komponenten"
 	@$(KUBECTL) -n $(CF_SYSTEM_NAMESPACE) wait --for=condition=Available deploy --all --timeout=10m
 
+## netz-reparieren: nach einem Neustart des Wirts - Cilium und CoreDNS neu registrieren
+#
+# NICHT nach `make stop`/`make start` noetig, sondern nach einem ungeplanten
+# Neustart der Maschine: Docker vergibt den Knoten-Containern dann neue
+# Adressen, die CiliumEndpoint- und CiliumNode-Objekte tragen noch die alten,
+# und der VXLAN-Tunnel formt sich nie neu. Ergebnis ist ein Cluster, in dem
+# kein Pod auf dem Worker das CoreDNS auf der Control-Plane erreicht - jede
+# CF-Komponente stirbt an "i/o timeout" bei der Namensaufloesung.
+#
+# Das Tueckische daran ist, dass es wie Anlaufschwierigkeiten aussieht. Ist es
+# aber nicht: der Zustand ist stabil falsch und heilt nicht durch Warten.
+# Gemessen in FINDINGS #33 - acht Stunden, ueber 350 Neustarts, unveraendert.
+netz-reparieren:
+	@$(KUBECTL) -n kube-system rollout restart ds/cilium deploy/cilium-operator deploy/coredns >/dev/null
+	@echo ">> warte auf Cilium"
+	@$(KUBECTL) -n kube-system rollout status ds/cilium --timeout=5m
+	@$(KUBECTL) -n kube-system rollout status deploy/coredns --timeout=2m
+	@# Die Gegenprobe gehoert ins Target, nicht in eine Erinnerung: ohne sie
+	@# meldet es Erfolg, sobald die Pods laufen - und ob die Aufloesung wieder
+	@# geht, hat dann niemand geprueft.
+	@echo ">> Gegenprobe: loest ein Pod auf dem Worker wieder auf?"
+	@$(KUBECTL) -n $(CF_SYSTEM_NAMESPACE) exec nats-0 -c nats -- \
+	   getent hosts postgresql.$(CF_SYSTEM_NAMESPACE).svc.cluster.local >/dev/null \
+	   && echo "   DNS antwortet wieder." \
+	   || { echo "   DNS antwortet NICHT - der Befund ist ein anderer, siehe FINDINGS #33"; exit 1; }
+	@echo "   Die CF-Komponenten brauchen danach einige Minuten; make status zeigt es."
+
 ## status: Ist-Zustand auf einen Blick
 status:
 	@ops/status.sh
@@ -280,4 +307,4 @@ down: cf-clone
 
 .PHONY: help cf-clone cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status down
+        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren down
