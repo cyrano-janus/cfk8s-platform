@@ -10,10 +10,26 @@ import (
 )
 
 func main() {
+	// Der Gruss kommt aus der Umgebung, und nur ersatzweise aus dem Gebauten.
+	//
+	// Der eingebackene Wert ist absichtlich falsch: hier laeuft seit dem
+	// Plattformwechsel echtes Cloud Foundry und kein Korifi mehr. Er steht
+	// trotzdem noch da, weil genau das der Normalfall ist - ein Wert, der
+	// einmal stimmte, wandert ins Artefakt und altert dort still.
+	//
+	// Kapitel 6 des Lernspiels nebenan haengt daran: der Spieler findet, dass
+	// der Wert nicht in der Umgebung steht, sondern im Gebauten, und zieht ihn
+	// heraus. Wer den Ersatzwert hier korrigiert, nimmt dem Kapitel seinen
+	// Gegenstand - er soll falsch bleiben.
+	gruss := os.Getenv("GRUSS")
+	if gruss == "" {
+		gruss = "Hallo von Go auf Korifi"
+	}
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"message":               "Hallo von Go auf Korifi",
+			"message":               gruss,
 			"buildpack":             "paketo-buildpacks/go",
 			"vcap_services_present": os.Getenv("VCAP_SERVICES") != "",
 		})
