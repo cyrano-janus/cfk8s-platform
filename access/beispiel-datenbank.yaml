@@ -1,0 +1,42 @@
+# Eine PostgreSQL-Datenbank für eine Anwendung - angelegt direkt am
+# CNPG-Operator, nicht über den OSB-Broker.
+#
+# Anlegen (mit der Kubeconfig aus `make app-access`):
+#   KUBECONFIG=access/kubeconfig-app.yaml kubectl apply -f access/beispiel-datenbank.yaml
+#
+# Die Zugangsdaten legt CNPG danach selbst als Secret ab: meine-db-app mit den
+# Schlüsseln username, password, dbname, host, port und uri. Die Anwendung liest
+# sie von dort - sie stehen nirgends in dieser Datei und müssen nicht vergeben
+# werden.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: meine-db
+spec:
+  # Ein Knoten. Für eine Entwicklungsdatenbank ist Replikation nur Wartezeit
+  # beim Anlegen; CNPG kann sie später ohne Neuanlage erhöhen.
+  instances: 1
+
+  # Ohne imageName nimmt CNPG das Standard-Image seiner Version. Das hält die
+  # Datenbank an die Operator-Version gebunden, die in versions.env steht, und
+  # spart einen zweiten Ort, an dem eine Version gepflegt werden müsste.
+
+  storage:
+    size: 1Gi
+
+  bootstrap:
+    initdb:
+      # Name der Datenbank und des Eigentümers. Beides landet im Secret
+      # meine-db-app; ein Passwort wird erzeugt, nicht gesetzt.
+      database: appdb
+      owner: app
+
+  # Der kind-Cluster hat keine großen Reserven - neben Cloud Foundry, dem
+  # Broker und den Operatoren ist er gut gefüllt. Ohne Grenzen hier verdrängt
+  # eine Datenbank im Zweifel CF-Komponenten vom Knoten.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

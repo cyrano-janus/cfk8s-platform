@@ -8,3 +8,6 @@ cf/kind-deployment/
 
 # cf-CLI-Artefakte
 .cf/
+
+# Die Kubeconfig aus `make app-access`. Enthält ein ServiceAccount-Token.
+access/kubeconfig-*.yaml
