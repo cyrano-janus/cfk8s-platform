@@ -8,26 +8,36 @@ make app-access          # Namespace, Rechte und Kubeconfig anlegen
 make app-access-revoke   # Zugang sperren, Daten behalten
 ```
 
-Erzeugt wird `access/kubeconfig-app.yaml` (nicht im Git). Damit:
+Erzeugt wird `access/kubeconfig-app.yaml` (nicht im Git).
+
+## Eine Datenbank betreiben
+
+`db.sh` nimmt diese Kubeconfig von sich aus — also den eingeschränkten
+ServiceAccount, nicht den Administrator-Kontext:
 
 ```
-export KUBECONFIG="$PWD/access/kubeconfig-app.yaml"
-kubectl apply -f access/beispiel-datenbank.yaml
-kubectl get cluster meine-db -w
+./access/db.sh up        # anlegen, warten, Zugangsdaten zeigen
+./access/db.sh status    # Cluster, Pods, Volumes, Services
+./access/db.sh creds     # Zugangsdaten aus dem Secret
+./access/db.sh forward   # Tunnel auf 127.0.0.1:5432
+./access/db.sh events    # bei Problemen: Ereignisse und Pod-Log
+./access/db.sh down      # vollständig löschen (fragt nach)
 ```
 
-CNPG legt die Zugangsdaten selbst als Secret ab — sie werden nirgends vergeben:
+Mehrere Datenbanken nebeneinander: `DB=zweite-db ./access/db.sh up`. Der Name
+wird über `envsubst` in [beispiel-datenbank.yaml](beispiel-datenbank.yaml)
+eingesetzt, ein blosses `kubectl apply -f` auf diese Datei greift deshalb zu
+kurz.
 
-```
-kubectl get secret meine-db-app -o jsonpath='{.data.uri}' | base64 -d
-```
+Die Zugangsdaten **vergibt niemand** — CNPG legt sie als Secret `<name>-app`
+ab, mit `username`, `password`, `host`, `port`, `dbname`, `uri`, `jdbc-uri` und
+`pgpass`. Der Host darin gilt clusterintern; für eine Anwendung außerhalb
+zuerst `db.sh forward` und dann `127.0.0.1:5432` einsetzen.
 
-Läuft die Anwendung außerhalb des Clusters, führt der Weg über einen Tunnel;
-das Recht dazu ist in der Role enthalten:
-
-```
-kubectl port-forward svc/meine-db-rw 5432:5432
-```
+`down` verlässt sich nicht darauf, dass Kubernetes hinter dem Cluster-Objekt
+aufräumt, sondern sieht nach: gemessen blieben PVC und Pod nach dem Löschen
+zurück und wurden erst im Nachräum-Schritt entfernt. Ein übrig gebliebenes
+Volume belegt Speicher und ließe ein späteres `up` auf alten Daten aufsetzen.
 
 ## Was dieser Zugang kann — und was nicht
 

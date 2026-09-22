@@ -1,17 +1,24 @@
+# Der Name kommt aus ${DB} (Vorgabe: meine-db) - access/db.sh rendert die Datei
+# mit envsubst, damit derselbe Text mehrere Datenbanken tragen kann.
+#
 # Eine PostgreSQL-Datenbank für eine Anwendung - angelegt direkt am
 # CNPG-Operator, nicht über den OSB-Broker.
 #
-# Anlegen (mit der Kubeconfig aus `make app-access`):
-#   KUBECONFIG=access/kubeconfig-app.yaml kubectl apply -f access/beispiel-datenbank.yaml
+# Anlegen, ansehen, löschen - alles über:
+#   ./access/db.sh up
 #
-# Die Zugangsdaten legt CNPG danach selbst als Secret ab: meine-db-app mit den
-# Schlüsseln username, password, dbname, host, port und uri. Die Anwendung liest
-# sie von dort - sie stehen nirgends in dieser Datei und müssen nicht vergeben
-# werden.
+# Von Hand ginge es auch, aber nicht mit einem blossen `kubectl apply`: die
+# Datei traegt ${DB} und muss vorher gerendert werden.
+#   DB=meine-db envsubst < access/beispiel-datenbank.yaml | kubectl apply -f -
+#
+# Die Zugangsdaten legt CNPG danach selbst als Secret <name>-app ab, mit den
+# Schlüsseln username, password, dbname, host, port, uri, jdbc-uri und pgpass.
+# Die Anwendung liest sie von dort - sie stehen nirgends in dieser Datei und
+# müssen nicht vergeben werden.
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: meine-db
+  name: ${DB}
 spec:
   # Ein Knoten. Für eine Entwicklungsdatenbank ist Replikation nur Wartezeit
   # beim Anlegen; CNPG kann sie später ohne Neuanlage erhöhen.
