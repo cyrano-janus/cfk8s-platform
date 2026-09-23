@@ -49,6 +49,15 @@ Namespace.
 Die Kubeconfig trägt ein gültiges Token und ist deshalb von `.gitignore`
 ausgeschlossen. Sie gehört dem Mandanten, nicht dem Repo.
 
+## Für Mandanten: [BEFEHLE.md](BEFEHLE.md)
+
+Alles zum Kopieren, in der Reihenfolge, in der man es braucht — Zugang setzen,
+Anwendung ausrollen, veröffentlichen, Datenbank anlegen und einbinden,
+Fehlersuche, Abräumen. Jeder Befehl dort ist einmal gelaufen; was danebensteht,
+ist die Ausgabe, die dabei kam.
+
+Die Kurzfassung:
+
 ## Eine Anwendung ausrollen
 
 Aus Sicht des Mandanten, mit seiner Kubeconfig:
