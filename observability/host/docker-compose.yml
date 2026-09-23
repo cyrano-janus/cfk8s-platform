@@ -1,0 +1,58 @@
+# Die Messfuehler fuer den Wirt.
+#
+# Sie laufen als Container, messen aber den RECHNER - dafuer die Mounts aus
+# dem Wurzelverzeichnis und `pid: host`. Ein node-exporter ohne diese Mounts
+# meldet die Werte seines eigenen Containers: plausible Zahlen, falsche
+# Aussage.
+#
+# Beide haengen am Docker-Netz "kind", in dem auch die kind-Cluster liegen.
+# Deshalb braucht keiner von beiden einen veroeffentlichten Port - Prometheus
+# erreicht sie von innen ueber ihren Container-Namen. Ein Port am Wirt waere
+# eine offene Tuer ohne Zweck.
+services:
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:${NODE_EXPORTER_VERSION}
+    container_name: obs-node-exporter
+    restart: unless-stopped
+    pid: host
+    command:
+      - '--path.rootfs=/host'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      # Ohne diesen Ausschluss erscheint jede overlay2-Schicht von Docker als
+      # eigener Datentraeger - hunderte Reihen, die alle dieselbe Platte
+      # meinen.
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/credentials/.+|var/lib/docker/.+|var/lib/kubelet/.+)($$|/)'
+      - '--collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|cgroup.?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$$'
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - kind
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_VERSION}
+    container_name: obs-cadvisor
+    restart: unless-stopped
+    # cAdvisor liest die cgroups aller Container; das geht nicht ohne erhoehte
+    # Rechte. Er schreibt nichts - alle Mounts sind nur lesbar.
+    privileged: true
+    devices:
+      - /dev/kmsg
+    command:
+      # Nur was gebraucht wird: ohne diese Auswahl liefert cAdvisor tausende
+      # Reihen je Container, und Prometheus speichert sie alle.
+      - '--docker_only=true'
+      - '--housekeeping_interval=15s'
+      - '--disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp'
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - kind
+
+networks:
+  kind:
+    external: true

@@ -384,6 +384,10 @@ obs-up:
 obs-scrape:
 	@ops/obs-scrape.sh
 
+## obs-host: Messfuehler fuer den Laptop (node-exporter, cAdvisor) - auf dem WIRT
+obs-host:
+	@ops/obs-host.sh
+
 ## obs-dashboards: Dashboards aus observability/dashboards/ nach Grafana
 obs-dashboards:
 	@ops/obs-dashboards.sh
@@ -411,4 +415,4 @@ down: cf-clone cf-link
 
 .PHONY: help cf-clone cf-link cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren obs-up obs-scrape obs-dashboards obs-verify obs-down down
+        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren obs-up obs-scrape obs-host obs-dashboards obs-verify obs-down down

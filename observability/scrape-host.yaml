@@ -1,0 +1,35 @@
+# Die beiden Messfuehler auf dem Wirt.
+#
+# Ziele sind Container-NAMEN im Docker-Netz "kind", keine Adressen - aus
+# demselben Grund wie beim Broker: nach einem Neustart des Wirts vergibt Docker
+# neue IPs (FINDINGS #33), die Namen bleiben.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: host-node
+  namespace: observability
+spec:
+  staticConfigs:
+    - targets:
+        - obs-node-exporter:9100
+      labels:
+        host: laptop
+  metricsPath: /metrics
+  scrapeInterval: 30s
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: host-container
+  namespace: observability
+spec:
+  staticConfigs:
+    - targets:
+        - obs-cadvisor:8080
+      labels:
+        host: laptop
+  metricsPath: /metrics
+  # cAdvisor liefert auch bei eingeschraenkten Metriken viele Reihen. Eine
+  # Minute reicht fuer die Frage "wer verbraucht gerade was" und kostet ein
+  # Drittel dessen, was 20 Sekunden kosteten.
+  scrapeInterval: 60s

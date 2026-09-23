@@ -34,7 +34,9 @@ ausgeliefert; Grafanas Sidecar sucht das Label `grafana_dashboard=1` und legt
 jede gefundene Datei ab. Was jemand stattdessen in der Oberfläche
 zusammenklickt, liegt in Grafanas Datenbank und ist nach einem Neuaufbau weg.
 
-Vorhanden ist **„OSB-Broker"** (<http://127.0.0.1:3000>, Ordner *General*), mit
+Vorhanden sind zwei: **„OSB-Broker"** und **„Laptop"**.
+
+**„OSB-Broker"** (<http://127.0.0.1:3000>, Ordner *General*), mit
 zehn Panels in vier Reihen: Zustand (erreichbar, aktive Instanzen und
 Bindungen, Lesefehler), Vorgänge einmal als Summe und einmal als Zuwachs,
 Antworten nach HTTP-Status und Antwortzeit-Quantile, zuletzt die Abfragen der
@@ -49,6 +51,31 @@ Zwei Entscheidungen darin sind absichtlich und sollten beim Ändern bleiben:
 - **Die Antwortzeit-Quantile rechnen über 15 Minuten**, nicht über 5. Hier
   kommen Anfragen in Schüben; über ein kurzes Fenster ohne Verkehr liefert das
   Quantil keinen Wert, sondern eine Lücke.
+
+**„Laptop"** zeigt den Rechner selbst: Arbeitsspeicher, CPU-Last,
+Datenträger und je eine Top-Ten nach Speicher, CPU und Netzwerk. Die Daten
+kommen von zwei Messfühlern, die als Container **auf dem Wirt** laufen:
+
+```
+make obs-host
+```
+
+`node-exporter` liefert die Werte des Rechners, `cAdvisor` die je Container.
+Beide hängen am Docker-Netz `kind` und brauchen deshalb keinen veröffentlichten
+Port — Prometheus erreicht sie über ihren Namen. Sie laufen **nicht** im
+Cluster: ein Exporter dort misst den kind-Knoten-Container, nicht den Laptop;
+die Zahlen sähen plausibel aus und wären falsch. Gegenprobe beim Aufbau: 23,3
+GiB / 8 Kerne / 467,9 GiB gegen `free`, `nproc` und `df` — identisch.
+
+Zwei Grenzen dieser Sicht stehen in den Panel-Beschreibungen und gehören dazu:
+
+- **Ein kind-Knoten erscheint als EIN Container.** Was darin an Pods läuft,
+  sieht cAdvisor von außen nicht. Für die Pod-Ebene müsste man den
+  kubelet-Endpunkt im jeweiligen Cluster abfragen.
+- **Plattenbelegung je Container gibt es nicht.** cAdvisor meldet
+  `container_fs_usage_bytes` nur für den Wirt insgesamt, ohne `name`-Label —
+  Docker mit overlay2 liefert die Aufschlüsselung nicht. An dieser Stelle steht
+  deshalb der Netzwerkverkehr, nicht eine Zahl, die es nicht gibt.
 
 Nach einer Änderung an einer `.json` erneut `make obs-dashboards` — das Target
 prüft das JSON, bevor es ausliefert. Ein kaputtes überspränge das Sidecar
