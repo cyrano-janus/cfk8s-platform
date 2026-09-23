@@ -269,31 +269,6 @@ security-groups:
 
 # ---------------------------------------------------------------- Anwendungen
 
-## app-access: Namespace, ServiceAccount und Kubeconfig für eine eigene App
-app-access:
-	@# Zugang für eine Anwendung, die hier ihre Datenbank betreibt - mit
-	@# Rechten NUR in ihrem Namespace. Die Begründung, warum nicht einfach die
-	@# kind-Kubeconfig weitergereicht wird, steht in access/app-access.yaml.
-	@#
-	@# Idempotent: apply auf bestehende Objekte ändert nichts, und die
-	@# Kubeconfig wird jedes Mal neu geschrieben - das ist auch der Weg, sie
-	@# nach einem Neuaufbau des Clusters wieder gültig zu machen (der
-	@# API-Server-Port wechselt dabei).
-	@envsubst < access/app-access.yaml | $(KUBECTL) apply -f - >/dev/null
-	@echo "   Mandant $(APP_NAMESPACE) / ServiceAccount $(APP_SERVICE_ACCOUNT)"
-	@CTX=$(CTX) ops/app-kubeconfig.sh
-
-## app-access-revoke: Zugang der App sperren (Namespace und Daten bleiben)
-app-access-revoke:
-	@# Der Widerruf, den eine weitergegebene kind-Kubeconfig nicht hat: das
-	@# Token verschwindet, die Datenbank bleibt stehen. Ein neues gibt es mit
-	@# `make app-access`.
-	@$(KUBECTL) -n $(APP_NAMESPACE) delete secret $(APP_SERVICE_ACCOUNT)-token --ignore-not-found >/dev/null
-	@rm -f $(APP_KUBECONFIG)
-	@echo "   Token gelöscht, $(APP_KUBECONFIG) entfernt. Namespace $(APP_NAMESPACE) steht noch."
-
-# ---------------------------------------------------------------- Prüfen
-
 ## verify: alle Akzeptanz-Checks der Reihe nach (read-only, Sekunden)
 verify:
 	@# 06 bleibt draussen: es prueft den Neustartvertrag und duldet dabei eine
