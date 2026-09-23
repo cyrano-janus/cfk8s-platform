@@ -355,6 +355,10 @@ netz-reparieren:
 apps-up:
 	@ops/apps-up.sh
 
+## apps-metrics: den Anwendungs-Cluster im Observability-Cluster sichtbar machen
+apps-metrics:
+	@ops/apps-metrics.sh
+
 ## apps-mandant: Namespace, Rechte und Kubeconfig fuer einen Mandanten (NAME=...)
 apps-mandant:
 	@ops/apps-tenant.sh "$(NAME)"
@@ -414,4 +418,4 @@ down: cf-clone cf-link
 
 .PHONY: help cf-clone cf-link cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren apps-up apps-mandant apps-mandant-weg apps-verify apps-down obs-up obs-scrape obs-host obs-dashboards obs-verify obs-down down
+        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren apps-up apps-metrics apps-mandant apps-mandant-weg apps-verify apps-down obs-up obs-scrape obs-host obs-dashboards obs-verify obs-down down

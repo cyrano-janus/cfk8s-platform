@@ -1,0 +1,126 @@
+{
+  "uid": "apps-cluster",
+  "title": "Anwendungs-Cluster",
+  "description": "Was die Mandanten im Cluster apps betreiben: Anwendungen, Ressourcen, Aufrufe. Gemessen über kubelet, cAdvisor, ingress-nginx und kube-state-metrics.",
+  "tags": ["apps", "mandanten"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "DS", "label": "Datenquelle", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0 }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat", "title": "Mandanten",
+      "description": "Namespaces mit dem Label mandant - also alles, was `make apps-mandant` angelegt hat. Die Namespaces des Clusters selbst zählen nicht mit.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "count(kube_namespace_labels{label_mandant!=\"\"}) or vector(0)", "instant": true } ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "Laufende Pods",
+      "description": "Nur die der Mandanten - Ingress-Controller, Datenbank-Operator und Systemdienste sind herausgerechnet.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "count(kube_pod_status_phase{phase=\"Running\",namespace!~\"kube-.*|ingress-nginx|cnpg-system|metrics-access|local-path-storage|default\"} == 1) or vector(0)", "instant": true } ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "Datenbanken",
+      "description": "CNPG-Cluster, die Mandanten für sich angelegt haben.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "count(kube_statefulset_replicas{cluster=\"apps\",namespace!~\"kube-.*|ingress-nginx|cnpg-system|metrics-access\"}) or vector(0)", "instant": true } ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat", "title": "Aufrufe je Minute",
+      "description": "Alles, was durch den Ingress-Controller geht. Leer heißt: niemand ruft gerade eine Anwendung auf.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(rate(nginx_ingress_controller_requests[5m])) * 60 or vector(0)", "instant": true } ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area", "textMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 1 }, "overrides": [] }
+    },
+    {
+      "type": "bargauge", "title": "Arbeitsspeicher je Mandant",
+      "description": "Aus cAdvisor im Anwendungs-Cluster - anders als im Laptop-Dashboard ist hier die Pod-Ebene sichtbar, nicht nur der Knoten-Container.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [ { "refId": "A", "expr": "topk(10, sum by (namespace) (container_memory_working_set_bytes{cluster=\"apps\",namespace!=\"\",namespace!~\"kube-.*|local-path-storage\"}))", "instant": true, "legendFormat": "{{namespace}}" } ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "minVizWidth": 8, "minVizHeight": 16, "valueMode": "text" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 1, "min": 0, "color": { "mode": "fixed", "fixedColor": "#3b82f6" } }, "overrides": [] }
+    },
+    {
+      "type": "bargauge", "title": "CPU je Mandant",
+      "description": "In Kernen: 1,0 heißt, dieser Namespace beschäftigt dauerhaft einen ganzen Kern.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [ { "refId": "A", "expr": "topk(10, sum by (namespace) (rate(container_cpu_usage_seconds_total{cluster=\"apps\",namespace!=\"\",namespace!~\"kube-.*|local-path-storage\"}[5m])))", "instant": true, "legendFormat": "{{namespace}}" } ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "minVizWidth": 8, "minVizHeight": 16, "valueMode": "text" },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 2, "min": 0, "color": { "mode": "fixed", "fixedColor": "#8b5cf6" } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries", "title": "Aufrufe je Anwendung",
+      "description": "Nach Host aufgeschlüsselt - jede Zeile ist eine Adresse, die ein Mandant veröffentlicht hat.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [ { "refId": "A", "expr": "sum by (host) (rate(nginx_ingress_controller_requests[5m])) * 60", "legendFormat": "{{host}}" } ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 1, "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "showPoints": "never", "axisLabel": "Aufrufe / min" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries", "title": "Antworten nach Status",
+      "description": "2xx ist Erfolg, 4xx meist eine unbekannte Adresse, 5xx ein Fehler der Anwendung selbst.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [ { "refId": "A", "expr": "sum by (status) (rate(nginx_ingress_controller_requests[5m])) * 60", "legendFormat": "HTTP {{status}}" } ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 1, "min": 0,
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 80, "showPoints": "never", "stacking": { "mode": "normal", "group": "A" }, "axisLabel": "Antworten / min" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table", "title": "Was jeder Mandant betreibt",
+      "description": "Pods je Namespace, aus kube-state-metrics. Zeigt auch Namespaces ohne Verbrauch - ein Mandant, der nichts laufen hat, fehlt in den Balken oben.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 20 },
+      "targets": [ { "refId": "A", "expr": "sum by (namespace) (kube_pod_status_phase{phase=\"Running\",namespace!~\"kube-.*|ingress-nginx|cnpg-system|metrics-access|local-path-storage|default\"})", "instant": true, "format": "table" } ],
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "namespace" }, "properties": [ { "id": "displayName", "value": "Mandant" } ] },
+          { "matcher": { "id": "byName", "options": "Value" }, "properties": [ { "id": "displayName", "value": "laufende Pods" } ] }
+        ]
+      }
+    },
+    {
+      "type": "stat", "title": "Knoten des Clusters",
+      "description": "Der Anwendungs-Cluster hat einen Knoten. Steht hier etwas anderes oder nichts, stimmt etwas mit dem kubelet-Zugang nicht.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 20 },
+      "targets": [ { "refId": "A", "expr": "count(kubelet_node_name{cluster=\"apps\"})", "instant": true } ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } },
+        "overrides": []
+      }
+    }
+  ]
+}

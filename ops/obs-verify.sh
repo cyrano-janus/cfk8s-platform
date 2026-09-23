@@ -48,4 +48,12 @@ check "Ziel osb-broker ist up" "up" \
 check "Messwerte des Brokers liegen vor" "ja" \
   "curl -s --max-time 10 --get --data-urlencode 'query=osb_last_operation_state' $PROM/api/v1/query | grep -q '\"osb_last_operation_state\"' && echo ja || echo nein"
 
+# Die Nachbarcluster. Vier Ziele im Anwendungs-Cluster: zwei am kubelet
+# (Ressourcen und Knotenzustand), eines am Ingress, eines an
+# kube-state-metrics. Faellt eines aus, fehlt im Dashboard eine Haelfte - und
+# zwar ohne rote Meldung, denn ein Panel ohne Daten sieht aus wie ein Panel
+# ohne Ereignisse.
+check "Ziele im Anwendungs-Cluster: alle up" "4" \
+  "curl -s --max-time 10 '$PROM/api/v1/targets?state=active' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(sum(1 for t in d[\"data\"][\"activeTargets\"] if t[\"labels\"].get(\"cluster\")==\"apps\" and t[\"health\"]==\"up\"))'"
+
 finish

@@ -34,7 +34,7 @@ ausgeliefert; Grafanas Sidecar sucht das Label `grafana_dashboard=1` und legt
 jede gefundene Datei ab. Was jemand stattdessen in der Oberfläche
 zusammenklickt, liegt in Grafanas Datenbank und ist nach einem Neuaufbau weg.
 
-Vorhanden sind zwei: **„OSB-Broker"** und **„Laptop"**.
+Vorhanden sind drei: **„OSB-Broker"**, **„Laptop"** und **„Anwendungs-Cluster"**.
 
 **„OSB-Broker"** (<http://127.0.0.1:3000>, Ordner *General*), mit
 zehn Panels in vier Reihen: Zustand (erreichbar, aktive Instanzen und
@@ -76,6 +76,46 @@ Zwei Grenzen dieser Sicht stehen in den Panel-Beschreibungen und gehören dazu:
   `container_fs_usage_bytes` nur für den Wirt insgesamt, ohne `name`-Label —
   Docker mit overlay2 liefert die Aufschlüsselung nicht. An dieser Stelle steht
   deshalb der Netzwerkverkehr, nicht eine Zahl, die es nicht gibt.
+
+**„Anwendungs-Cluster"** zeigt, was die Mandanten im Cluster `apps` treiben:
+wie viele es sind, was sie betreiben, wie viel Speicher und CPU je Mandant
+draufgeht und welche Adresse wie oft aufgerufen wird. Hergestellt wird der
+Blick mit:
+
+```
+make apps-metrics
+```
+
+Vier Ziele, und jedes beantwortet etwas anderes:
+
+| Ziel | Was es liefert |
+|---|---|
+| `apps-cadvisor` | Speicher und CPU **je Pod** — hier ist die Pod-Ebene sichtbar, die im Laptop-Dashboard fehlt |
+| `apps-kubelet` | Zustand des Knotens |
+| `apps-ingress` | Aufrufe je Adresse und Status |
+| `apps-kube-state` | was ein Mandant betreibt: Pods, Deployments, deren Bereitschaft |
+
+Der Zugang ist ein ServiceAccount im Anwendungs-Cluster, der **ausschließlich
+Metriken lesen** darf (`nodes/metrics`, `nodes/stats`); sein Token wandert als
+Secret herüber. Ohne Token antwortet der kubelet mit `401` — gegengeprüft.
+
+**Warum hier `insecureSkipVerify` steht und beim Broker nicht.** Der kubelet
+signiert sein Zertifikat selbst und schreibt einen Zeitstempel in den Namen
+(`CN=apps-control-plane-ca@1790169056`); bei jedem Neustart entsteht ein neues.
+Ein hinterlegter Vertrauensanker wäre nach dem nächsten Start falsch. Beim
+Broker hält cert-manager eine stabile CA — dort wird geprüft.
+
+Drei Dinge, die beim Bauen aufgefallen sind und in den Dateien stehen:
+
+- **`kube_namespace_labels` bleibt leer**, solange man die Labels nicht
+  ausdrücklich freigibt (`metricLabelsAllowlist`). Das Panel „Mandanten"
+  zeigte null, obwohl einer da war.
+- **`nginx_ingress_controller_requests` entsteht erst mit Verkehr** auf einem
+  *bekannten* Ingress. Anfragen an unbekannte Hosts zählt der Controller nicht
+  mit; ein leeres Panel heißt hier „niemand ruft etwas auf", nicht „kaputt".
+- **Der Ingress-Controller braucht `updateStrategy: Recreate`.** Mit hostPort
+  auf einem einzigen Knoten blockiert der alte Pod die Ports 80 und 443, der
+  neue bleibt Pending, und Helm läuft in den Timeout.
 
 Nach einer Änderung an einer `.json` erneut `make obs-dashboards` — das Target
 prüft das JSON, bevor es ausliefert. Ein kaputtes überspränge das Sidecar

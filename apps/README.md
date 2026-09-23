@@ -121,9 +121,10 @@ den Anwendungen.
 
 ## Was noch fehlt
 
-- **Metriken.** Der Observability-Cluster sieht diesen hier noch nicht. Der Weg
-  dorthin ist derselbe wie beim Broker — Knotenport, Docker-DNS, ScrapeConfig —
-  und damit eine Datei, kein Umbau.
+- ~~Metriken~~ — erledigt: `make apps-metrics` macht diesen Cluster im
+  Observability-Cluster sichtbar (Dashboard „Anwendungs-Cluster"). Der Zugang
+  ist ein ServiceAccount, der nur Metriken lesen darf; die Einzelheiten stehen
+  in [`../observability/README.md`](../observability/README.md).
 - **TLS.** Die Anwendungen sprechen heute nur HTTP. Für echte Zertifikate
   bräuchte es cert-manager wie auf der Plattform.
 - **Grenzen je Mandant.** Es gibt keine ResourceQuota — ein Mandant kann heute

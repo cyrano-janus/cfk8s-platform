@@ -1,0 +1,22 @@
+# Werte fuer kube-state-metrics im Anwendungs-Cluster.
+
+# Nur die Objektarten, die hier eine Frage beantworten. Die Voreinstellung
+# sammelt alles, was der Cluster kennt - Reihen, die niemand abfragt, und die
+# Prometheus trotzdem speichert.
+collectors:
+  - pods
+  - deployments
+  - statefulsets
+  - services
+  - ingresses
+  - namespaces
+  - persistentvolumeclaims
+  - jobs
+  - cronjobs
+
+# OHNE DIESE ZEILE gibt es keine Mandanten-Zahl. Seit Version 2 exportiert
+# kube-state-metrics Labels von Objekten nicht mehr von selbst; die Reihe
+# kube_namespace_labels entsteht leer, und ein Dashboard, das danach fragt,
+# zeigt null Mandanten, obwohl welche da sind. Gemessen genau so.
+metricLabelsAllowlist:
+  - "namespaces=[mandant]"

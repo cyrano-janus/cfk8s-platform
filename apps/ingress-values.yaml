@@ -21,6 +21,14 @@ controller:
   # Ein Knoten, ein Controller - mehr Repliken haetten keinen Platz und
   # blieben Pending.
   replicaCount: 1
+  # ERSETZEN statt rollend ersetzen. Mit hostPort und einem einzigen Knoten
+  # endet ein RollingUpdate im Stillstand: der alte Pod haelt 80 und 443, der
+  # neue bleibt Pending mit "didn't have free ports", und Helm wartet bis zum
+  # Timeout auf etwas, das nie eintritt. Gemessen beim Einschalten der
+  # Metriken. Der Preis sind wenige Sekunden ohne Ingress bei jeder Aenderung -
+  # in einem Entwicklungscluster der bessere Tausch.
+  updateStrategy:
+    type: Recreate
   ingressClassResource:
     name: nginx
     enabled: true
@@ -30,6 +38,12 @@ controller:
     # Gemessen genau so, beim ersten Mandanten-Versuch. Ein Mandant soll
     # `kubectl create ingress ...` tippen koennen, ohne eine Klasse zu kennen.
     default: true
+  metrics:
+    # Ohne diese Zeile hat der Controller keinen /metrics-Endpunkt, und der
+    # Observability-Cluster saehe nicht, welche Anwendung wie oft aufgerufen
+    # wird - die interessanteste Zahl in einem Mandanten-Cluster.
+    enabled: true
+    port: 10254
   admissionWebhooks:
     # Der Webhook prueft Ingress-Objekte beim Anlegen. In einem
     # Entwicklungscluster kostet er beim Aufbau mehr Zeit, als er an

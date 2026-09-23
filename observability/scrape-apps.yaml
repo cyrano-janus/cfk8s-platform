@@ -1,0 +1,96 @@
+# Der Blick des Observability-Clusters in den Anwendungs-Cluster.
+#
+# Vier Ziele, alle ueber den Docker-DNS-Namen `apps-control-plane` statt ueber
+# eine IP - nach einem Neustart des Wirts vergibt Docker neue Adressen
+# (FINDINGS #33), die Namen bleiben.
+---
+# Ressourcen je Pod und damit je Mandant. Der kubelet liefert sie selbst; ein
+# eigener Exporter waere doppelt.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: apps-cadvisor
+  namespace: observability
+spec:
+  staticConfigs:
+    - targets: [apps-control-plane:10250]
+      labels:
+        cluster: apps
+  metricsPath: /metrics/cadvisor
+  scheme: HTTPS
+  scrapeInterval: 60s
+  authorization:
+    type: Bearer
+    credentials:
+      name: apps-scraper
+      key: token
+  tlsConfig:
+    # HIER steht insecureSkipVerify, und beim Broker steht es nicht - der
+    # Unterschied hat einen Grund. Der kubelet signiert sein Zertifikat selbst
+    # und schreibt einen Zeitstempel in den Namen:
+    #
+    #   issuer=CN=apps-control-plane-ca@1790169056
+    #
+    # Bei jedem Neustart entsteht ein neues. Ein einmal hinterlegter
+    # Vertrauensanker waere nach dem naechsten Start falsch, und das Ziel ginge
+    # auf down, ohne dass sich etwas Wesentliches geaendert haette. Der saubere
+    # Weg waere serverTLSBootstrap mit von der Cluster-CA signierten
+    # kubelet-Zertifikaten - dafuer muesste jede CSR genehmigt werden, und das
+    # ist fuer einen Entwicklungscluster zu viel Apparat.
+    #
+    # Was NICHT entfaellt, ist die Anmeldung: der kubelet verlangt ein gueltiges
+    # Bearer-Token und antwortet sonst mit 401. Gegenprobe gelaufen.
+    insecureSkipVerify: true
+---
+# Der Zustand des Knotens selbst (Kapazitaet, Pod-Zahl).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: apps-kubelet
+  namespace: observability
+spec:
+  staticConfigs:
+    - targets: [apps-control-plane:10250]
+      labels:
+        cluster: apps
+  metricsPath: /metrics
+  scheme: HTTPS
+  scrapeInterval: 60s
+  authorization:
+    type: Bearer
+    credentials:
+      name: apps-scraper
+      key: token
+  tlsConfig:
+    # Selbstsigniert und bei jedem Start neu - die Begruendung steht beim
+    # Ziel apps-cadvisor oben.
+    insecureSkipVerify: true
+---
+# Welche Anwendung wie oft aufgerufen wird - die interessanteste Zahl in einem
+# Mandanten-Cluster.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: apps-ingress
+  namespace: observability
+spec:
+  staticConfigs:
+    - targets: [apps-control-plane:30254]
+      labels:
+        cluster: apps
+  metricsPath: /metrics
+  scrapeInterval: 30s
+---
+# Was ein Mandant betreibt: Pods, Deployments, deren Bereitschaft.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: apps-kube-state
+  namespace: observability
+spec:
+  staticConfigs:
+    - targets: [apps-control-plane:30808]
+      labels:
+        cluster: apps
+  metricsPath: /metrics
+  scrapeInterval: 60s
