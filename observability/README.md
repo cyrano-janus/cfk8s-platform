@@ -98,6 +98,61 @@ Prometheus-Pod neu starten oder lange genug warten, bis die Verbindung von
 selbst abläuft. Dasselbe gilt in die andere Richtung — ein wiederhergestellter
 Weg wird erst mit dem nächsten Verbindungsaufbau sichtbar.
 
+## Cloud Foundry misst sich selbst — nur nicht in Prometheus' Sprache
+
+Gemessen am 2026-09-23. Die Frage ist wichtig, weil sie darüber entscheidet,
+wie die Plattform überhaupt in dieses Bild kommt.
+
+**Es gibt nichts zu scrapen.** Kein einziger Container in `cf-system`
+deklariert einen Metrik-Port; der einzige `metrics`-Port im ganzen Namespace
+gehört dem Istio-Sidecar und stammt nicht von Cloud Foundry.
+
+**Gemessen wird trotzdem, und zwar laufend.** CF schickt seine Zahlen als
+Loggregator-Envelopes — Gauges und Counter — durch `forwarder-agent` →
+`loggregator-agent` → `doppler` → `log-cache`. Über die CF-API abgefragt
+(`https://log-cache.cf.127-0-0-1.nip.io/api/v1/meta`, mit dem Token aus
+`cf oauth-token`) kennt log-cache zwölf Quellen, zehn davon Plattform:
+
+```
+auctioneer   bbs   cloud_controller   doppler   gorouter   locket
+rep   reverse_log_proxy   route-emitter   ssh_proxy
+```
+
+Die Daten sind aktuell — der jüngste Envelope war eine Sekunde alt —, und
+`gorouter` allein liefert in 100 Envelopes **40 verschiedene Messgrößen**:
+`uptime`, `routed_app_requests`, `websocket_upgrades`, `routes_pruned`,
+`total_dropped_messages` und weitere.
+
+**Der PromQL-Endpunkt von log-cache antwortet, liefert hier aber nichts.**
+log-cache bringt unter `/api/v1/query` eine Prometheus-kompatible Schnittstelle
+mit. Sie antwortet im richtigen Format und mit einem Fehler:
+
+```
+$ query=uptime{source_id="gorouter"}
+{"status":"error","errorType":"bad_data","error":"Metrics not available"}
+```
+
+Und das für einen Gauge-Namen, von dem eine Sekunde zuvor ein frischer Wert
+gelesen wurde. **Warum, ist ungeklärt** — ob die Engine in dieser
+Konfiguration abgeschaltet ist, eine andere Autorisierung verlangt oder die
+Reihen anders adressiert werden, ist nicht untersucht. Wer diesen Weg gehen
+will, fängt hier an.
+
+Daraus die drei Wege, in aufsteigender Zukunftssicherheit:
+
+1. **log-cache als Grafana-Datenquelle.** Der direkteste Weg, ohne zusätzliche
+   Komponente — sobald die Frage oben beantwortet ist.
+2. **Eine Brücke**, die log-cache liest und als `/metrics` ausliefert. Trägt
+   sicher, ist aber selbstgebaut, und was hier selbstgebaut wird, muss hier
+   gepflegt werden.
+3. **Der Upstream-Weg.** Genau dieses Problem ist der Grund für den RFC
+   „Provide CF Platform Logs over Otel" und den offenen `otel-collector`-PR im
+   `kind-deployment`. Fällt CF auf OTel, entfällt die Brücke.
+
+Der Unterschied zum Broker ist damit benannt: **er** liefert Prometheus-
+Metriken direkt und wird gescrapt; **die Plattform** liefert ihre Zahlen in
+Loggregators Format, und das Verbindungsstück dorthin fehlt.
+
 ## Was noch fehlt
 
 - **Loki** für Logs, und ein Sammler davor. Loki nimmt Logs nicht selbst
@@ -111,7 +166,6 @@ Weg wird erst mit dem nächsten Verbindungsaufbau sichtbar.
   auf einen Empfänger hier. Wer stattdessen Container-Logs einsammelt, baut
   eine Pipeline, welche die eigentlichen Anwendungen nicht erfasst — und merkt
   es nicht.
-- **Metriken der Plattform selbst** (Cloud Controller, Diego, Gorouter). Der
-  Upstream bewegt sich hier: RFC „Provide CF Platform Logs over Otel" ist in
-  Abstimmung, ein `otel-collector` liegt als PR im `kind-deployment`. Das
-  abzuwarten ist billiger, als den Weg selbst zu erfinden.
+- **Das Verbindungsstück zu den Metriken der Plattform** — sie fließen, sie
+  sind nur nicht abholbar (siehe den Abschnitt darüber). Erster Schritt: die
+  ungeklärte Antwort des PromQL-Endpunkts von log-cache.
