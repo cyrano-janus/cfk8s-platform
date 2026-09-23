@@ -38,16 +38,21 @@ make deps pki
 make services
 cp broker/values.local.yaml.example broker/values.local.yaml   # Passwort setzen
 make broker
-make network      # sonst erreicht keine App ihren gebundenen Dienst
 make register
+make security-groups   # sonst erreicht keine App ihren gebundenen Dienst
 make verify
 ```
 
-`make network` ist keine Kür. Eine Application Security Group kann den Weg von
-einer CF-Anwendung zu einem Dienst **im selben Cluster** nicht öffnen: Cilium
-prüft gegen die Endpunkt-Identität des Ziel-Pods, und eine CIDR-Regel trifft
-die nie. Warum das so ist und was daraus folgt, steht in
-[`network/README.md`](network/README.md) und in `FINDINGS.md` #32.
+`make security-groups` ist keine Kür. Cloud Foundry schottet Anwendungen vom
+Service-Netz des Clusters ab; ohne die Gruppe läuft jeder Verbindungsversuch
+einer App zu ihrer Datenbank in einen `i/o timeout`. Gemessen mit
+`samples/db-probe`: mit Gruppe 3 ms, ohne Gruppe fünf Sekunden bis zum Timeout.
+
+**Unter Cilium reicht die Gruppe nicht** — dort prüft die CNI gegen die
+Endpunkt-Identität des Ziel-Pods, und eine CIDR-Regel trifft die nie. Für
+diesen Fall liegt in [`network/`](network/README.md) eine Umgehung, die
+`make network` anwendet; unter Calico überspringt sich das Target selbst. Die
+Langfassung steht in `FINDINGS.md` #32.
 
 Zwei Prüfläufe, die verschiedene Fragen beantworten:
 

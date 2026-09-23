@@ -976,7 +976,12 @@ Trust-Store der Cloud-Controller-Pods legen. Dann prüft echter CC-Code ein
 echtes Zertifikat, und das wäre eine belastbare Aussage. Das ist ein möglicher
 nächster Ausbau dieser Plattform, kein Mangel des Brokers.
 
-## #32 — Eine CF-App erreicht die Dienste des Brokers nicht
+## #32 — Eine CF-App erreicht die Dienste des Brokers nicht (unter Cilium)
+
+> **Geltung:** Der Befund haengt an der CNI. Unter Cilium gilt er, unter Calico
+> nicht — dort traegt die Application Security Group, und die Umgehung
+> entfaellt. Gemessen am Ende dieses Abschnitts. Diese Plattform faehrt seit
+> dem 2026-09-23 Calico (`CNI` in `versions.env`).
 
 Der erste echte Konsument — das Lernspiel — bindet eine `cnpg-postgresql`-Instanz
 und kommt nicht an sie heran:
@@ -1167,29 +1172,74 @@ verborgen lag:
 > Cilium „außen", und erst dann greift die ASG. Das ist eine Entscheidung über
 > die Bauform der Entwicklungsplattform, keine Zeile Konfiguration.
 
-### Nachtrag: der Upstream bietet seit v0.24.0 Calico an — die Frage wird messbar
+### Die Ursache liegt in der CNI, nicht in Cloud Foundry — mit Calico traegt die ASG
 
-Aufgenommen am 2026-09-23. `cloudfoundry/kind-deployment` hat mit `c3d6df4`
-(Tag `v0.24.0`, 2026-09-08) **Calico als alternative CNI** aufgenommen; bis
-dahin gab es nur Cilium.
+Gemessen am 2026-09-23 auf `kind-deployment@c3d6df4` (v0.24.0), das seit dem
+2026-09-08 Calico als zweite CNI anbietet (`CNI=calico` in `versions.env`).
 
-Das berührt die Wurzel dieses Befundes. Er hängt nicht an Cloud Foundry und
-nicht am Broker, sondern daran, **wie Cilium prüft**: gegen die
-Endpunkt-Identität des Ziel-Pods, die eine CIDR-Regel nie trifft. Calico prüft
-gegen Adressen. Ob eine Application Security Group damit trägt, ohne dass
-`network/backing-services-egress.yaml` sie ersetzen muss, ist deshalb zum ersten
-Mal prüfbar, ohne etwas nachzubauen.
+**Der Befund oben gilt fuer Cilium und nur fuer Cilium.** Unter Calico
+funktioniert der Weg, den Cloud Foundry dafuer vorsieht: die Application
+Security Group. Die Umgehung in `network/backing-services-egress.yaml` wird
+nicht gebraucht, und `make network` ueberspringt sich deshalb selbst, wenn eine
+andere CNI laeuft.
 
-**Das ist eine Hypothese, kein Befund.** Gemessen ist bisher nichts. Sie steht
-hier, damit der offene Punkt am Ende von #32 eine Adresse hat: Vor der
-Entscheidung über einen Weiterleiter außerhalb des Clusters ist ein Lauf gegen
-Calico der billigere Versuch.
+**Was der policy-agent daraus macht.** Er uebersetzt `backing-services` in eine
+`NetworkPolicy` (projectcalico.org) im Namespace `cf-workloads`, benannt nach
+der ASG-GUID, und die Regel bleibt, was sie in der ASG war — eine Adresse:
 
-Was er **nicht** beantwortet: Auf Tanzu TAS liegt die Anwendung auf einer
-BOSH-VM und der Cluster daneben. Ein Erfolg mit Calico machte die ASG hier
-wirksam — er sagte nichts darüber, ob die vom Broker ausgelieferte
-clusterinterne Adresse dort erreichbar wäre. Der Befund fiele damit nicht weg,
-nur seine Umgehung.
+```yaml
+spec:
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        nets: [10.96.0.0/16]
+        ports: [5432, 5672, 15672]
+  selector: cloudfoundry.org/source-type != "STG"
+  types: [Egress]
+```
+
+Genau daran scheitert Cilium: es loest die ClusterIP vor der Auswertung auf die
+Backend-Pod-IP auf und prueft gegen deren Endpunkt-Identitaet, die eine
+CIDR-Regel nie trifft. Calico prueft gegen die Zieladresse. Dieselbe ASG, zwei
+Ergebnisse.
+
+**Gemessen mit `samples/db-probe`** — einer Anwendung, die absichtlich kein
+Postgres spricht: sie liest die Adresse aus `VCAP_SERVICES`, loest den Namen
+auf und versucht eine TCP-Verbindung mit fuenf Sekunden Frist. Aufloesung und
+Verbindung meldet sie getrennt, weil ein unaufloesbarer Name (#5) und ein
+gesperrter Weg (#32) verschiedene Befunde sind. Ihr Health Check haengt nicht
+am Ergebnis; sonst meldete die Plattform einen Startabbruch statt eines
+Messwerts.
+
+Drei Zustaende, in dieser Reihenfolge gefahren:
+
+| Zustand | Ergebnis |
+|---|---|
+| ASG gebunden, uebersetzt | erreichbar, **3 ms** |
+| ASG geloescht, Policy verschwunden | `dial tcp 10.96.196.246:5432: i/o timeout` nach **5,005 s** |
+| ASG neu angelegt, `cf restart` | erreichbar, **3 ms** |
+
+Der mittlere Lauf ist die Gegenprobe: ohne die Regel kommt die Anwendung nicht
+durch. Calico setzt also wirklich durch, und der erste Lauf ist kein Ergebnis
+fehlender Absicherung.
+
+**Zwei Beobachtungen zur Wirksamkeit, die sich nicht decken.** Das Loeschen der
+ASG wirkte ohne Zutun: der Agent entfernte die Policy, und der naechste
+Verbindungsversuch derselben laufenden Anwendung lief in den Timeout. Das
+Anlegen wirkte erst nach `cf restart` — vorher lieferte der Cloud Controller
+dem Agenten die neue Gruppe nicht aus, und ohne Policy blieb der Weg zu.
+Entzug greift also sofort, Erteilung erst beim Neustart. Fuer den Betrieb ist
+das die unbedenkliche Richtung; `make security-groups` sagt es im Abschluss an.
+
+**Was das fuer ein Zielsystem heisst.** Die Haelfte des Befundes, die an der
+CNI hing, ist eine Aussage ueber diese Entwicklungsplattform, nicht ueber Cloud
+Foundry — sie faellt mit der CNI. Was davon unberuehrt bleibt, ist die Frage
+darunter: Der Broker liefert eine clusterinterne Adresse aus. Hier erreicht sie
+die Anwendung, weil Anwendung und Dienst im selben Cluster liegen. Auf Tanzu
+TAS liegt die Anwendung auf einer BOSH-VM und der Cluster daneben; dorthin
+fuehrt kein Weg, egal welche CNI im Cluster laeuft. Der Netzweg bleibt offen
+(ADR 0009), die Umgehung nicht.
 
 ---
 

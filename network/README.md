@@ -1,7 +1,16 @@
 # Netzwerkregeln, die keine Security Group sein können
 
 Hier liegt genau eine Regel, und sie steht hier, weil eine Application Security
-Group sie auf dieser Plattform nicht ausdrücken kann.
+Group sie **unter Cilium** nicht ausdrücken kann.
+
+> **Diese Plattform fährt Calico** (`CNI` in `versions.env`), und dort wird die
+> Regel nicht gebraucht: die ASG aus `security-groups/` trägt, der
+> `policy-agent` übersetzt sie in eine Calico-`NetworkPolicy`, und die
+> Anwendung erreicht ihren Dienst. `make network` überspringt sich deshalb
+> selbst, solange eine andere CNI als Cilium läuft.
+>
+> Die Datei bleibt, weil der Upstream beide CNIs unterstützt und der Befund
+> unter Cilium unverändert gilt. Gemessen in [FINDINGS #32](../FINDINGS.md).
 
 **Der Kern:** Cilium löst einen Service auf die Backend-Pod-IP auf, *bevor* es
 die Regel auswertet, und prüft dann gegen die **Endpunkt-Identität** des

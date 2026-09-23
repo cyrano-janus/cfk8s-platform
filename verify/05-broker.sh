@@ -35,8 +35,12 @@ if [ "${CNI:-cilium}" = "cilium" ]; then
   check "Egress cf-workloads -> Instanzen erlaubt" "cf-apps-to-backing-services" \
     "\$K get ciliumclusterwidenetworkpolicy cf-apps-to-backing-services -o jsonpath='{.metadata.name}'"
 else
-  skip "Egress cf-workloads -> Instanzen" \
-    "CNI=${CNI}: die Cilium-Umgehung entfaellt, ob eine ASG traegt ist offen (FINDINGS #32)"
+  # Unter Calico traegt der vorgesehene Weg: die Application Security Group.
+  # Geprueft wird ihre Bindung, nicht die uebersetzte NetworkPolicy - die
+  # entsteht nur, solange Anwendungen im Space laufen, und ein Akzeptanzcheck
+  # darf nicht davon abhaengen, ob gerade jemand etwas gepusht hat.
+  check "ASG backing-services global gebunden (running)" "1" \
+    "cf security-groups 2>/dev/null | awk '\$1==\"backing-services\" && \$4==\"running\"' | wc -l | tr -d ' '"
 fi
 
 check "Broker-Service auf 443" "443" \

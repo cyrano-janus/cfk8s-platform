@@ -1,0 +1,16 @@
+applications:
+  - name: db-probe
+    memory: 64M
+    instances: 1
+    # binary_buildpack: die Probe wird hier gebaut und als fertiges Programm
+    # gepusht. Ein Sprach-Buildpack laedt beim Staging Abhaengigkeiten nach -
+    # auf einer Plattform, deren Netzwege gerade die Messgroesse sind, waere
+    # das eine zweite Unbekannte.
+    buildpacks:
+      - binary_buildpack
+    command: ./db-probe
+    path: dist
+    # Der Health Check zeigt auf /healthz, und der antwortet unabhaengig vom
+    # Messergebnis. Eine Probe, die am gesperrten Netzweg stirbt, misst nichts.
+    health-check-type: http
+    health-check-http-endpoint: /healthz

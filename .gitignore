@@ -11,3 +11,7 @@ cf/kind-deployment/
 
 # Die Kubeconfig aus `make app-access`. Enthält ein ServiceAccount-Token.
 access/kubeconfig-*.yaml
+
+# Gebaute Programme der Beispiele. `cf push` braucht sie, das Repo nicht -
+# sieben Megabyte, die sich bei jeder Aenderung vollstaendig unterscheiden.
+samples/*/dist/

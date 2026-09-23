@@ -17,23 +17,29 @@ Befund hier ist deshalb eine Aussage über das Zielsystem, kein Hinweis.
    `$(KUBECTL)` und `$(HELM)` durchgängig — neue Aufrufe genauso.
 2. **`prometheus` nie löschen oder neu aufsetzen.** Er ist als Metrikziel für
    diese Plattform und den Broker vorgesehen; wie, ist noch zu spezifizieren.
-3. **`versions.env` ist die einzige Quelle für Versionen.** Keine Version darf
+3. **Die CNI steht in `versions.env`, und sie entscheidet mit.** Diese
+   Plattform fährt `CNI=calico`. Unter Cilium gilt FINDINGS #32 — eine ASG
+   öffnet den Weg einer App zu ihrem Dienst nicht —, unter Calico nicht. Wer
+   umstellt, ändert die Bedeutung von Befunden und muss `make down cf-up`
+   fahren; die Targets `network` und `netz-reparieren` setzen Cilium voraus
+   und sagen es.
+4. **`versions.env` ist die einzige Quelle für Versionen.** Keine Version darf
    irgendwo sonst stehen. Das gilt auch für den Upstream: `CF_KIND_COMMIT`
    pinnt `cloudfoundry/kind-deployment` auf einen Commit, nicht auf einen
    Branch — ein Repo, das seine BOSH-Release-Versionen laufend nachzieht,
    änderte sonst unter uns die Plattform, gegen die wir Befunde protokollieren.
-4. **Cloud Foundry wird nicht nachgebaut.** Alles, was CF selbst betrifft,
+5. **Cloud Foundry wird nicht nachgebaut.** Alles, was CF selbst betrifft,
    gehört in den Upstream und wird von hier nur aufgerufen (`cf-up`, `down`).
    Was hier gebaut wird, ist alles daneben: PKI, Operatoren, Broker,
    Registrierung, Prüfungen.
-5. **Kein Ad-hoc-`kubectl apply`/`patch` als Lösung.** Jede Änderung am Cluster
+6. **Kein Ad-hoc-`kubectl apply`/`patch` als Lösung.** Jede Änderung am Cluster
    gehört als YAML oder Helm-Value ins Repo und hinter ein Makefile-Target.
    Ad-hoc-Kommandos sind zum Diagnostizieren erlaubt, nicht zum Herstellen von
    Zuständen.
-6. **Jedes Target ist idempotent und einzeln aufrufbar.**
-7. **Zwischenstände committen.** Ein Arbeitsschritt endet mit sauberem
+7. **Jedes Target ist idempotent und einzeln aufrufbar.**
+8. **Zwischenstände committen.** Ein Arbeitsschritt endet mit sauberem
    Working Tree.
-8. **Begründungen gehören in die Datei, nicht in den Chat.** Jede nicht
+9. **Begründungen gehören in die Datei, nicht in den Chat.** Jede nicht
    offensichtliche Zeile trägt einen Kommentar, der sagt *warum*, nicht *was*.
 
 ## Was diese Plattform belegt — und was nicht
@@ -66,6 +72,7 @@ make services     # CNPG, RabbitMQ Cluster Operator
 cp broker/values.local.yaml.example broker/values.local.yaml   # Passwort setzen
 make broker       # bauen, laden, CRDs, Definitions, Rollout
 make register     # bei CF registrieren, Pläne freigeben
+make security-groups  # sonst erreicht keine App ihren gebundenen Dienst
 make verify       # read-only, Sekunden
 make conformance  # legt eine echte Instanz an, Minuten
 ```
