@@ -46,6 +46,10 @@ Befund hier ist deshalb eine Aussage über das Zielsystem, kein Hinweis.
    Working Tree.
 9. **Begründungen gehören in die Datei, nicht in den Chat.** Jede nicht
    offensichtliche Zeile trägt einen Kommentar, der sagt *warum*, nicht *was*.
+10. **Komplexe Rezepte stehen in `ops/*.sh`, nicht im Makefile.** Ein Target
+    ruft ein Skript auf. In einem Make-Rezept bedeuten Anführungszeichen,
+    Backslashes und `$` drei Dinge auf einmal — mehrzeilige Logik dort zu
+    schreiben kostet mehr Zeit an Escaping als an Inhalt (RETRO 2026-09-23).
 
 ## Was diese Plattform belegt — und was nicht
 
