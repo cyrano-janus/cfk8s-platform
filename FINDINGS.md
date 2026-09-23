@@ -1361,3 +1361,7 @@ exceeded` — zu einem Zeitpunkt, zu dem CredHub seit zwölf Minuten bereit war 
 derselbe Name aus einem Nachbar-Pod auf demselben Knoten auflöst und Port 8844
 offen ist. Ursache nicht ermittelt. Der nfsbroker wird hier nicht gebraucht; der
 Punkt steht, damit er nicht jedes Mal neu untersucht wird.
+
+Eingegrenzt ist er immerhin: Im frisch gebauten Cluster desselben Tages kam er
+ohne Zutun hoch — 34 von 34 Pods. Der Zustand entsteht also beim Wiederanlauf
+nach dem Neustart des Wirts, nicht beim Aufbau.
