@@ -23,6 +23,37 @@ Adressen sind feste Knotenports aus `kind.yaml`, kein `port-forward` — ein
 Port-Forward überlebt weder das Schließen des Terminals noch einen Neustart
 des Pods.
 
+## Dashboards
+
+```
+make obs-dashboards
+```
+
+Liegt als **Datei im Repo** (`dashboards/*.json`) und wird als ConfigMap
+ausgeliefert; Grafanas Sidecar sucht das Label `grafana_dashboard=1` und legt
+jede gefundene Datei ab. Was jemand stattdessen in der Oberfläche
+zusammenklickt, liegt in Grafanas Datenbank und ist nach einem Neuaufbau weg.
+
+Vorhanden ist **„OSB-Broker"** (<http://127.0.0.1:3000>, Ordner *General*), mit
+zehn Panels in vier Reihen: Zustand (erreichbar, aktive Instanzen und
+Bindungen, Lesefehler), Vorgänge einmal als Summe und einmal als Zuwachs,
+Antworten nach HTTP-Status und Antwortzeit-Quantile, zuletzt die Abfragen der
+asynchronen Vorgänge und eine Tabelle je Angebot und Plan.
+
+Zwei Entscheidungen darin sind absichtlich und sollten beim Ändern bleiben:
+
+- **Keine Ampelfarben auf HTTP-Status.** 410 und 422 sind im OSB-Protokoll
+  reguläre Antworten — 410 Gone beim zweiten Abräumen, 422 bei einem nicht
+  zugesagten Planwechsel. Rot gefärbt läsen sie sich als Störung, obwohl sie
+  belegen, dass der Broker sich richtig verhält.
+- **Die Antwortzeit-Quantile rechnen über 15 Minuten**, nicht über 5. Hier
+  kommen Anfragen in Schüben; über ein kurzes Fenster ohne Verkehr liefert das
+  Quantil keinen Wert, sondern eine Lücke.
+
+Nach einer Änderung an einer `.json` erneut `make obs-dashboards` — das Target
+prüft das JSON, bevor es ausliefert. Ein kaputtes überspränge das Sidecar
+stillschweigend, und in Grafana fehlte das Dashboard ohne jede Meldung.
+
 ## Was gemessen wird — und was bewusst nicht
 
 Eingesammelt wird, was aus **`kind-cfk8s`** kommt: heute die Metriken des

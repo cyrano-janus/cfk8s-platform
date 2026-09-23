@@ -1,0 +1,245 @@
+{
+  "uid": "osb-broker",
+  "title": "OSB-Broker",
+  "description": "Was der Broker tut: Zustand, Vorgänge, Antwortzeiten. Die Daten holt Prometheus aus dem Plattform-Cluster.",
+  "tags": ["osb", "broker", "cfk8s"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "DS",
+        "label": "Datenquelle",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Broker erreichbar",
+      "description": "Antwortet /metrics beim letzten Abruf? Sagt NICHT, ob der Weg jetzt offen ist - Prometheus hält die Verbindung offen (siehe observability/README.md).",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "up{component=\"osb-broker\"}", "instant": true }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "ja", "color": "green", "index": 0 }, "0": { "text": "nein", "color": "red", "index": 1 } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Aktive Instanzen",
+      "description": "Bereitgestellte Dienste, die noch nicht abgeräumt sind - ein Istwert, kein Zähler.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(osb_active_instances)", "instant": true } ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "none", "graphMode": "area", "textMode": "value"
+      },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Aktive Bindungen",
+      "description": "Bestehende Bindungen zwischen Anwendungen und Diensten.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(osb_active_bindings)", "instant": true } ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "none", "graphMode": "area", "textMode": "value"
+      },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Lesefehler am Zustand",
+      "description": "Der Broker konnte seinen eigenen Zustand nicht lesen. Jeder Wert über null gehört angesehen.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [ { "refId": "A", "expr": "sum(osb_state_read_errors_total)", "instant": true } ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background", "graphMode": "none", "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Vorgänge insgesamt",
+      "description": "Zähler laufen nur nach oben; jede Stufe ist ein Vorgang. Flach heißt: nichts passiert.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "refId": "A", "expr": "sum(osb_provisions_total)",   "legendFormat": "Bereitstellungen" },
+        { "refId": "B", "expr": "sum(osb_deprovisions_total)", "legendFormat": "Abräumungen" },
+        { "refId": "C", "expr": "sum(osb_bindings_total)",     "legendFormat": "Bindungen" },
+        { "refId": "D", "expr": "sum(osb_unbinds_total)",      "legendFormat": "Lösungen" }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "lineInterpolation": "stepAfter", "axisLabel": "Vorgänge" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Bereitstellungen" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#3b82f6" } } ] },
+          { "matcher": { "id": "byName", "options": "Abräumungen" },     "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#d97706" } } ] },
+          { "matcher": { "id": "byName", "options": "Bindungen" },       "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#8b5cf6" } } ] },
+          { "matcher": { "id": "byName", "options": "Lösungen" },        "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#0d9488" } } ] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Neue Vorgänge je 5 Minuten",
+      "description": "Dieselben Zähler als Zuwachs statt als Summe - hier sieht man, WANN etwas passiert ist.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(osb_provisions_total[5m]))",   "legendFormat": "Bereitstellungen" },
+        { "refId": "B", "expr": "sum(increase(osb_deprovisions_total[5m]))", "legendFormat": "Abräumungen" },
+        { "refId": "C", "expr": "sum(increase(osb_bindings_total[5m]))",     "legendFormat": "Bindungen" },
+        { "refId": "D", "expr": "sum(increase(osb_unbinds_total[5m]))",      "legendFormat": "Lösungen" }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 80, "showPoints": "never", "barAlignment": 0, "axisLabel": "Vorgänge / 5 min" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Bereitstellungen" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#3b82f6" } } ] },
+          { "matcher": { "id": "byName", "options": "Abräumungen" },     "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#d97706" } } ] },
+          { "matcher": { "id": "byName", "options": "Bindungen" },       "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#8b5cf6" } } ] },
+          { "matcher": { "id": "byName", "options": "Lösungen" },        "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#0d9488" } } ] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Antworten nach Status",
+      "description": "ACHTUNG: 410 und 422 sind im OSB-Protokoll reguläre Antworten, keine Fehler - 410 Gone beim zweiten Abräumen, 422 bei einem nicht zugesagten Planwechsel. Deshalb tragen die Reihen hier keine Ampelfarben.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (status) (increase(osb_requests_total[5m]))", "legendFormat": "HTTP {{status}}" }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 80, "showPoints": "never", "stacking": { "mode": "normal", "group": "A" }, "axisLabel": "Antworten / 5 min" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Antwortzeit des Brokers",
+      "description": "Aus dem Histogramm berechnete Quantile über alle Pfade. p95 heißt: 95 von 100 Anfragen waren schneller. Fenster 15 Minuten, nicht 5: hier kommen Anfragen in Schüben, und über ein kurzes Fenster ohne Verkehr liefert das Quantil keinen Wert, sondern eine Lücke.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(osb_request_duration_seconds_bucket[15m])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(osb_request_duration_seconds_bucket[15m])))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(osb_request_duration_seconds_bucket[15m])))", "legendFormat": "p99" }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s", "decimals": 3,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "axisLabel": "Sekunden" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p50" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#93c5fd" } } ] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#3b82f6" } } ] },
+          { "matcher": { "id": "byName", "options": "p99" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#1d4ed8" } } ] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Abfragen asynchroner Vorgänge",
+      "description": "Cloud Foundry fragt nach jedem asynchronen Auftrag wiederholt nach, bis er fertig ist. Viele 'in progress' vor einem 'succeeded' sind der Normalfall, kein Problem.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (state) (osb_last_operation_state)", "legendFormat": "{{state}}" }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "lineInterpolation": "stepAfter", "axisLabel": "Abfragen" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "succeeded" },   "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#3b82f6" } } ] },
+          { "matcher": { "id": "byName", "options": "in progress" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#d97706" } } ] },
+          { "matcher": { "id": "byName", "options": "failed" },      "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "title": "Instanzen je Angebot und Plan",
+      "description": "Welches Angebot wird tatsächlich benutzt - und in welchem Plan.",
+      "datasource": { "type": "prometheus", "uid": "${DS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (service_id, plan_id) (osb_active_instances)", "instant": true, "format": "table" }
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "service_id" }, "properties": [ { "id": "displayName", "value": "Angebot" } ] },
+          { "matcher": { "id": "byName", "options": "plan_id" },   "properties": [ { "id": "displayName", "value": "Plan" } ] },
+          { "matcher": { "id": "byName", "options": "Value" },     "properties": [ { "id": "displayName", "value": "Instanzen" } ] }
+        ]
+      }
+    }
+  ]
+}
