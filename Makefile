@@ -24,6 +24,20 @@ CTX     := kind-$(KIND_CLUSTER_NAME)
 KUBECTL := kubectl --context $(CTX)
 HELM    := helm --kube-context $(CTX)
 CF_DIR  := cf/kind-deployment
+
+# Der Upstream wird ueber diesen Symlink aufgerufen, nicht ueber CF_DIR.
+#
+# scripts/init.sh baut seine Docker-Aufrufe mit einem ungequoteten pwd-Aufruf:
+#   docker run --rm -v <pwd>/temp/certs:/certs alpine/openssl
+# Dieses Arbeitsverzeichnis heisst "Claude DEV" - mit Leerzeichen. Das Argument
+# zerfaellt dann in zwei Worte, und docker bricht mit "invalid reference format"
+# ab, bevor ein einziges Zertifikat entsteht. Ein Symlink ohne Leerzeichen macht
+# den Pfad, den das Skript sieht, harmlos; cd haelt ihn logisch fest, und Docker
+# loest ihn beim Binden auf.
+#
+# Den Upstream zu patchen scheidet aus: er wird hier aufgerufen, nicht nachgebaut
+# (CLAUDE.md, Regel 4), und ein Patch waere nach dem naechsten cf-clone weg.
+CF_LINK := $(HOME)/.cache/cfk8s-upstream
 CM_URL  := https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
 CF_API  := https://api.cf.127-0-0-1.nip.io
 
@@ -47,6 +61,12 @@ cf-clone:
 	@cd $(CF_DIR) && git fetch -q origin && git checkout -q $(CF_KIND_COMMIT)
 	@echo "   $(CF_DIR) auf $(CF_KIND_COMMIT)"
 
+## cf-link: leerzeichenfreier Pfad auf den Upstream (Begruendung bei CF_LINK)
+cf-link: cf-clone
+	@mkdir -p $(dir $(CF_LINK)); \
+	 ln -sfn "$(CURDIR)/$(CF_DIR)" $(CF_LINK); \
+	 echo "   $(CF_LINK) -> $(CF_DIR)"
+
 ## cf-tools: Werkzeuge nachlegen, die der Upstream braucht, aber nicht mitbringt
 cf-tools: cf-clone
 	@# Der Upstream installiert kind, kubectl und crane selbst in sein bin/ -
@@ -62,10 +82,17 @@ cf-tools: cf-clone
 	 else echo "   yq vorhanden"; fi
 
 ## cf-up: Cloud Foundry hochziehen (Minuten!) und Buildpacks laden
-cf-up: cf-clone cf-tools
+cf-up: cf-clone cf-tools cf-link
 	@echo ">> Cloud Foundry auf kind ($(KIND_CLUSTER_NAME))"
-	@$(MAKE) -C $(CF_DIR) up
-	@$(MAKE) -C $(CF_DIR) bootstrap
+	@# cd statt `make -C`: nur so sieht der Upstream den leerzeichenfreien Pfad.
+	@cd $(CF_LINK) && $(MAKE) up
+	@# Dazwischen die Anmeldung: `bootstrap` legt eine Org an und laedt die
+	@# Buildpacks - beides ueber die cf-CLI, beides ohne Sitzung unmoeglich.
+	@# Der Upstream hat ein login-Target, ruft es aber selbst nicht auf; ohne
+	@# diese Zeile bricht cf-up mit "The token expired, was revoked, or the
+	@# token ID is incorrect" ab - einem Token des VORIGEN Clusters.
+	@$(MAKE) --no-print-directory cf-login
+	@cd $(CF_LINK) && $(MAKE) bootstrap
 
 ## cf-login: bei der CF-API anmelden und Org/Space setzen
 cf-login:
@@ -346,9 +373,9 @@ status:
 	@ops/status.sh
 
 ## down: Cluster löschen (alles weg)
-down: cf-clone
-	@$(MAKE) -C $(CF_DIR) down
+down: cf-clone cf-link
+	@cd $(CF_LINK) && $(MAKE) down
 
-.PHONY: help cf-clone cf-up cf-login deps pki services broker broker-image broker-crds \
+.PHONY: help cf-clone cf-link cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
         register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren down
