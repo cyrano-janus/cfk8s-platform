@@ -43,6 +43,22 @@ rules:
   - apiGroups: [postgresql.cnpg.io]
     resources: [clusters, poolers, backups, scheduledbackups]
     verbs: [get, list, watch, create, update, patch, delete]
+  # Geheimnisse aus dem Speicher holen. Ein ExternalSecret sagt "hol Feld X
+  # aus Pfad Y"; der Operator legt daraus ein Kubernetes-Secret an. Ohne
+  # dieses Recht kann ein Mandant den Geheimnisspeicher nicht benutzen -
+  # gemessen beim ersten Versuch: `kubectl auth can-i create externalsecrets`
+  # antwortete "no", und die Einrichtung waere fuer ihn wertlos gewesen.
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # Den SecretStore nur LESEN. Er wird beim Anlegen des Mandanten erzeugt und
+  # zeigt auf dessen Pfad; ihn aendern zu duerfen, braeuchte niemand. Die
+  # eigentliche Grenze liegt ohnehin woanders - selbst ein umgebogener
+  # SecretStore bekaeme nichts, weil die Policy in OpenBao an die Anmelderolle
+  # gebunden ist und nur den eigenen Pfad erlaubt.
+  - apiGroups: [external-secrets.io]
+    resources: [secretstores]
+    verbs: [get, list, watch]
   # Lesen, was die eigene Rolle erlaubt. Ohne das kann ein Mandant nicht
   # nachsehen, was er darf, und raet stattdessen.
   - apiGroups: [rbac.authorization.k8s.io]

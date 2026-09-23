@@ -210,7 +210,99 @@ Kommt diese Zeile, steht alles: Netzweg, Zugangsdaten, Datenbank.
 
 ---
 
-## 7. Eine neue Version ausrollen
+## 7. Geheimnisse (API-Schlüssel und dergleichen)
+
+Für Zugangsdaten zu Drittdiensten gibt es einen Geheimnisspeicher. Der Vorteil:
+**Der Wert steht nirgends in deinem Repository** — auch nicht verschlüsselt. In
+Git liegt nur eine Referenz.
+
+Dein Pfad ist `mandanten/<dein-name>/` und gehört dir allein; fremde Pfade sind
+gesperrt. Den Zugang hat dein Namespace bereits, du musst nichts einrichten.
+
+**Einen Wert ablegen** — das macht heute der Betreiber für dich, weil der
+Schreibzugang am Speicher selbst hängt:
+
+```bash
+make apps-geheimnis NAME=<dein-name> PFAD=dienst-x FELD=api_key WERT=s3kr3t
+```
+
+**Den Wert in deine Anwendung holen.** Diese Datei kommt ins Git-Repository:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: dienst-x
+spec:
+  refreshInterval: 30s
+  secretStoreRef:
+    name: openbao          # steht schon in deinem Namespace
+    kind: SecretStore
+  target:
+    name: dienst-x         # so heißt das Kubernetes-Secret, das entsteht
+  dataFrom:
+    - extract:
+        key: <dein-name>/dienst-x
+EOF
+```
+
+Nachsehen, ob es geklappt hat:
+
+```bash
+kubectl get externalsecret dienst-x
+kubectl get secret dienst-x
+```
+
+```
+NAME       STORE     REFRESH   STATUS         READY
+dienst-x   openbao   30s       SecretSynced   True
+```
+
+**Wichtig: Wähle Feldnamen mit Unterstrich, nicht mit Bindestrich.** Ein Feld
+`api-key` landet zwar im Secret, ist als Umgebungsvariable aber nicht lesbar
+(`$api-key` gibt es in keiner Shell). `api_key` funktioniert.
+
+### Zwei Wege, es in den Container zu bekommen — und sie verhalten sich anders
+
+Als **Umgebungsvariablen**:
+
+```yaml
+      containers:
+        - name: web
+          image: nginx:alpine
+          envFrom:
+            - secretRef:
+                name: dienst-x
+```
+
+Als **Datei**:
+
+```yaml
+      containers:
+        - name: web
+          image: nginx:alpine
+          volumeMounts:
+            - name: geheim
+              mountPath: /etc/geheim
+              readOnly: true
+      volumes:
+        - name: geheim
+          secret:
+            secretName: dienst-x
+```
+
+Der Unterschied zählt, wenn sich ein Wert ändert — gemessen:
+
+| | Secret aktualisiert | laufender Pod sieht den neuen Wert |
+|---|---|---|
+| `envFrom` | ja | **nein**, nie. Erst nach `kubectl rollout restart deploy/<name>` |
+| Datei | ja | ja, nach etwa 75 Sekunden |
+
+Wer einen Schlüssel tauschen will, ohne die Anwendung anzufassen, nimmt also
+die Datei.
+
+## 8. Eine neue Version ausrollen
 
 ```bash
 kubectl set image deploy/meine-app web=nginx:1.27-alpine
@@ -223,7 +315,7 @@ Zurück, wenn es schiefging:
 kubectl rollout undo deploy/meine-app
 ```
 
-## 8. Abräumen
+## 9. Abräumen
 
 ```bash
 kubectl delete ingress meine-app

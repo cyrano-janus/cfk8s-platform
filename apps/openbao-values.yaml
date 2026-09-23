@@ -1,0 +1,52 @@
+# Werte fuer OpenBao im Anwendungs-Cluster.
+#
+# Die Voreinstellung des Charts ist bereits `standalone` mit Datei-Speicher -
+# hier steht nur, was davon abweicht oder was begruendet werden muss.
+
+# Der Agent-Injector klinkt sich als Webhook in jeden Pod-Start ein und holt
+# Geheimnisse ueber Annotationen. Das ist ein zweiter Weg neben dem External
+# Secrets Operator, und zwei Wege fuer dieselbe Sache sind einer zu viel: Wer
+# nicht weiss, welcher gilt, sucht Fehler an der falschen Stelle. Wir nehmen
+# ESO, weil nur der zu GitOps passt - in Git steht dann eine Referenz, nie ein
+# Wert.
+injector:
+  enabled: false
+
+server:
+  # Ein Knoten, eine Instanz. `ha` waere Raft mit drei Repliken - auf einem
+  # Ein-Knoten-Cluster nur Aufwand ohne Verfuegbarkeitsgewinn.
+  ha:
+    enabled: false
+
+  standalone:
+    enabled: true
+    # Uebernommen aus der Chart-Voreinstellung. Sie steht hier trotzdem, weil
+    # die Datei sonst nicht sagt, WAS eigentlich laeuft - und weil eine
+    # Aenderung des Charts sie sonst unbemerkt veraendern koennte.
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "file" {
+        path = "/openbao/data"
+      }
+
+  # Der Speicher ueberdauert Neustarts. Ohne ihn waeren die Geheimnisse nach
+  # jedem Herunterfahren des Laptops weg - und das Entsiegeln am Morgen
+  # sinnlos, weil es nichts zu entsiegeln gaebe.
+  dataStorage:
+    enabled: true
+    size: 1Gi
+    storageClass: standard   # local-path, kind bringt es mit
+
+  # Kein Ingress. OpenBao ist fuer Anwendungen IM Cluster da; der External
+  # Secrets Operator erreicht ihn ueber den clusterinternen Service. Wer die
+  # Oberflaeche sehen will, nimmt `kubectl port-forward` - eine Adresse von
+  # aussen waere eine Tuer, die niemand braucht.
+  ingress:
+    enabled: false

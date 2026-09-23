@@ -12,9 +12,20 @@ beiden Wege wissen nichts voneinander — das ist Absicht, keine Lücke.
 
 ```
 make apps-up                      # Cluster, Ingress, Datenbank-Operator
-make apps-mandant NAME=anna       # Namespace, Rechte, Kubeconfig für "anna"
+make apps-openbao                 # Geheimnisspeicher (einmalig)
+make apps-mandant NAME=anna       # Namespace, Rechte, Kubeconfig, Geheimnispfad
 make apps-verify                  # trägt der Weg von außen?
 ```
+
+Nach jedem Start des Clusters — auf diesem Rechner also jeden Morgen:
+
+```
+make openbao-unseal
+```
+
+Ein versiegelter OpenBao läuft, antwortet und gibt **nichts** heraus; jede
+Anwendung, die ein Geheimnis braucht, hängt. `make apps-verify` schlägt
+deshalb an, solange er zu ist.
 
 | | |
 |---|---|
@@ -48,6 +59,18 @@ Namespace.
 
 Die Kubeconfig trägt ein gültiges Token und ist deshalb von `.gitignore`
 ausgeschlossen. Sie gehört dem Mandanten, nicht dem Repo.
+
+## Geheimnisse
+
+Warum hier ein Geheimnisspeicher steht, was er im Betrieb bringt und was er auf
+diesem Laptop **nicht** leistet — dazu die Abgrenzung zu CredHub auf der
+CF-Seite: [GEHEIMNISSE.md](GEHEIMNISSE.md).
+
+Kurz: Jeder Mandant bekommt beim Anlegen einen eigenen Pfad
+`mandanten/<name>/`, eine Policy darauf und einen `SecretStore` in seinem
+Namespace. Werte legt der Betreiber ab (`make apps-geheimnis`), die Anwendung
+holt sie über ein `ExternalSecret` — in Git steht dann eine Referenz, nie ein
+Wert.
 
 ## Für Mandanten: [BEFEHLE.md](BEFEHLE.md)
 
@@ -136,5 +159,8 @@ den Anwendungen.
   in [`../observability/README.md`](../observability/README.md).
 - **TLS.** Die Anwendungen sprechen heute nur HTTP. Für echte Zertifikate
   bräuchte es cert-manager wie auf der Plattform.
+- **Zugänge auf Zeit für Datenbanken.** OpenBao kann kurzlebige
+  Postgres-Benutzer erzeugen statt fester Passwörter — dafür bräuchte er einen
+  Verwaltungszugang zu jeder Mandanten-Datenbank, und die entstehen dynamisch.
 - **Grenzen je Mandant.** Es gibt keine ResourceQuota — ein Mandant kann heute
   so viel Speicher anfordern, wie der Laptop hergibt.

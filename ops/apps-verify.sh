@@ -33,6 +33,19 @@ check "nginx ist die Standard-Ingressklasse" "true" \
 check "Ingress antwortet am Wirt (Port ${APPS_HTTP_PORT})" "404" \
   "curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:${APPS_HTTP_PORT}/"
 
+# Ein versiegelter OpenBao LAEUFT - sein Pod ist da, er antwortet, und er gibt
+# nichts heraus. Wer nur auf den Pod schaut, haelt ihn fuer gesund, waehrend
+# jede Anwendung, die ein Geheimnis braucht, haengt. Deshalb wird der Zustand
+# gefragt, nicht die Bereitschaft.
+if $K -n "${OPENBAO_NAMESPACE}" get pod openbao-0 >/dev/null 2>&1; then
+  check "OpenBao ist entsiegelt" "false" \
+    "\$K -n $OPENBAO_NAMESPACE exec openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 bao status -format=json 2>/dev/null | python3 -c 'import json,sys; print(str(json.load(sys.stdin)[\"sealed\"]).lower())'"
+  check "External Secrets Operator bereit" "1" \
+    "\$K -n external-secrets get deploy external-secrets -o jsonpath='{.status.readyReplicas}'"
+else
+  skip "OpenBao" "nicht installiert - make apps-openbao"
+fi
+
 # Die Plattform darf hier nicht mitreden: ein Mandant im Anwendungs-Cluster
 # hat mit cfk8s nichts zu tun. Faende sich hier der Broker, waere etwas
 # verwechselt worden.

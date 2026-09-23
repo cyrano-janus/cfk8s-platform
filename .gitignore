@@ -1,5 +1,6 @@
 # Lokale Secrets und Overrides - niemals committen
 *.local.yaml
+*.local.json
 broker/definitions.generated.yaml
 
 # Der geklonte Upstream. Er wird per Commit gepinnt (cf/PINNED), nicht
