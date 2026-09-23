@@ -216,17 +216,56 @@ Für Zugangsdaten zu Drittdiensten gibt es einen Geheimnisspeicher. Der Vorteil:
 **Der Wert steht nirgends in deinem Repository** — auch nicht verschlüsselt. In
 Git liegt nur eine Referenz.
 
-Dein Pfad ist `mandanten/<dein-name>/` und gehört dir allein; fremde Pfade sind
-gesperrt. Den Zugang hat dein Namespace bereits, du musst nichts einrichten.
+**Du verwaltest deine Werte selbst.** Dein Pfad ist `mandanten/<dein-name>/`
+und gehört dir allein; fremde Pfade sind gesperrt. Niemand muss etwas für dich
+eintragen.
 
-**Einen Wert ablegen** — das macht heute der Betreiber für dich, weil der
-Schreibzugang am Speicher selbst hängt:
+### Anmelden
 
 ```bash
-make apps-geheimnis NAME=<dein-name> PFAD=dienst-x FELD=api_key WERT=s3kr3t
+eval "$(./bao-login-<dein-name>.sh)"
 ```
 
-**Den Wert in deine Anwendung holen.** Diese Datei kommt ins Git-Repository:
+Das Skript liegt bei deiner Kubeconfig. Es holt sich das Token von dort, meldet
+sich an und setzt `BAO_ADDR` und `BAO_TOKEN` in deine Umgebung. Es enthält
+selbst **kein** Geheimnis — deshalb darf es neben deinem Code liegen.
+
+Das Token gilt eine Stunde. Läuft es ab, rufst du das Skript erneut auf; in
+einem Skript stellt man die Zeile einfach an den Anfang.
+
+### Werte ablegen, ansehen, löschen
+
+Mit dem `bao`-Client:
+
+```bash
+bao kv put  mandanten/<dein-name>/dienst-x api_key=s3kr3t region=eu
+bao kv get  mandanten/<dein-name>/dienst-x
+bao kv list mandanten/<dein-name>
+bao kv metadata delete mandanten/<dein-name>/dienst-x
+```
+
+Ohne Client, nur mit `curl` — für Skripte, die nichts installieren sollen:
+
+```bash
+curl -s -H "X-Vault-Token: $BAO_TOKEN" \
+  -X POST "$BAO_ADDR/v1/mandanten/data/<dein-name>/dienst-x" \
+  -d '{"data":{"api_key":"s3kr3t","region":"eu"}}'
+
+curl -s -H "X-Vault-Token: $BAO_TOKEN" \
+  "$BAO_ADDR/v1/mandanten/data/<dein-name>/dienst-x"
+```
+
+**Beachte den Einschub `data/` im API-Pfad.** Der `bao`-Client fügt ihn selbst
+ein, `curl` nicht — das ist die häufigste Verwechslung bei KV Version 2.
+
+**Wähle Feldnamen mit Unterstrich, nicht mit Bindestrich.** Ein Feld `api-key`
+landet zwar im Speicher, ist als Umgebungsvariable aber nicht lesbar
+(`$api-key` gibt es in keiner Shell). `api_key` funktioniert.
+
+### Den Wert in deine Anwendung holen
+
+Diese Datei kommt ins Git-Repository — sie enthält keinen Wert, nur einen
+Verweis:
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -247,11 +286,10 @@ spec:
 EOF
 ```
 
-Nachsehen, ob es geklappt hat:
+Nachsehen:
 
 ```bash
 kubectl get externalsecret dienst-x
-kubectl get secret dienst-x
 ```
 
 ```
@@ -259,9 +297,12 @@ NAME       STORE     REFRESH   STATUS         READY
 dienst-x   openbao   30s       SecretSynced   True
 ```
 
-**Wichtig: Wähle Feldnamen mit Unterstrich, nicht mit Bindestrich.** Ein Feld
-`api-key` landet zwar im Secret, ist als Umgebungsvariable aber nicht lesbar
-(`$api-key` gibt es in keiner Shell). `api_key` funktioniert.
+**Wenn es bei `SecretSyncedError` bleibt**, obwohl der Wert inzwischen da ist:
+Der Operator wartet nach mehreren Fehlversuchen immer länger. Ein Anstoß hilft:
+
+```bash
+kubectl annotate externalsecret dienst-x force-sync="$(date +%s)" --overwrite
+```
 
 ### Zwei Wege, es in den Container zu bekommen — und sie verhalten sich anders
 

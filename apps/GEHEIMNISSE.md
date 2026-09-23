@@ -111,11 +111,64 @@ Schritt mehr*. Statt `kubectl create secret` schreibt er ein Objekt und muss
 wissen, wo sein Pfad liegt. Der Gewinn zahlt sich erst aus, wenn es mehr als
 eine Umgebung und mehr als eine Person gibt.
 
+## Selbstbedienung: warum das der eigentliche Punkt ist
+
+Ein Geheimnisspeicher, in den nur der Betreiber schreiben kann, ist kein
+Dienst, sondern ein Antragsverfahren. Bei zehn Mandanten mit je einem Dutzend
+Schlüsseln wird er zum Flaschenhals für eine Tätigkeit, die ihn nichts angeht
+— und er bekommt dabei Geheimnisse zu sehen, die ihm nicht gehören. Genau so
+lief der erste Versuch auf: Ein Projekt hatte seine `ExternalSecrets` fertig
+und stand still, bis jemand die Werte eintrug.
+
+**Deshalb verwaltet jeder Mandant seinen Pfad selbst.** Er meldet sich an,
+legt ab, listet auf, löscht — innerhalb von `mandanten/<name>/` und nirgends
+sonst.
+
+### Angemeldet wird mit dem, was schon da ist
+
+Kein Passwort, kein zweiter Zugang: Der Mandant hat sein ServiceAccount-Token
+in der Kubeconfig, und die Anmelderolle bei OpenBao ist seit dem Anlegen an
+genau diesen ServiceAccount **und** seinen Namespace gebunden.
+
+```bash
+eval "$(./bao-login-<name>.sh)"      # holt das Token, meldet an, setzt BAO_*
+bao kv put mandanten/<name>/dienst-x api_key=…
+```
+
+Das Anmeldeskript entsteht mit dem Mandanten und liegt bei seiner Kubeconfig.
+Es enthält **kein** Geheimnis — es liest das Token von nebenan. Das
+OpenBao-Token, das dabei herauskommt, gilt eine Stunde.
+
+`userpass` wäre der andere Weg gewesen. Er hätte bedeutet: ein Passwort je
+Mandant erzeugen, übergeben, ablegen, irgendwann wechseln — vier Gelegenheiten,
+es zu verlieren, für einen Zugang, der ohnehin schon existiert.
+
+### Die Grenzen, gemessen
+
+| Versuch | Ergebnis |
+|---|---|
+| eigener Pfad schreiben, lesen, auflisten | geht |
+| in den Pfad eines anderen Mandanten schreiben | `HTTP 403` |
+| mit der Anmelderolle eines anderen Mandanten anmelden | `service account name not authorized` |
+| `ExternalSecret` auf einen selbst angelegten Pfad | `SecretSynced`, ohne Zutun des Betreibers |
+
+### Was der Betreiber noch tut
+
+`make apps-geheimnis` bleibt — für Übernahmen (etwa beim Umstieg von
+handgemachten Kubernetes-Secrets) und für den Fall, dass ein Mandant sich
+aussperrt. Der Regelweg ist es nicht mehr.
+
 ## Was es hier nicht bringt
 
 **Auf diesem Laptop ist nichts geschützt.** Die Entsiegelungsschlüssel liegen
 in `apps/openbao-init.local.json`, auf demselben Rechner wie der Speicher, den
-sie öffnen. Wer den Rechner hat, hat beides. Das ist keine Nachlässigkeit,
+sie öffnen. Wer den Rechner hat, hat beides.
+
+**Dazu kommt: der Zugang läuft über HTTP.** Der Ingress
+`openbao.k8s.127-0-0-1.nip.io:8080` hat kein TLS, also geht das Anmeldetoken im
+Klartext über das Docker-Netz. Auf einem Rechner, auf dem der
+Entsiegelungsschlüssel ohnehin danebenliegt, ändert das nichts an der Bilanz —
+im Betrieb wäre es untragbar, und dort ist TLS das Erste, was dazukommt. Das ist keine Nachlässigkeit,
 sondern unvermeidlich: Irgendwo muss der erste Schlüssel liegen, und ein
 Entwicklungssystem hat kein zweites Gerät, das ihn halten könnte.
 

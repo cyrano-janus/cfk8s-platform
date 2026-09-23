@@ -44,9 +44,18 @@ server:
     size: 1Gi
     storageClass: standard   # local-path, kind bringt es mit
 
-  # Kein Ingress. OpenBao ist fuer Anwendungen IM Cluster da; der External
-  # Secrets Operator erreicht ihn ueber den clusterinternen Service. Wer die
-  # Oberflaeche sehen will, nimmt `kubectl port-forward` - eine Adresse von
-  # aussen waere eine Tuer, die niemand braucht.
+  # Eine Adresse von aussen, und zwar fuer die MANDANTEN. Der External Secrets
+  # Operator braeuchte sie nicht - er laeuft im Cluster. Aber ein Mandant, der
+  # seine eigenen Geheimnisse verwalten soll, sitzt ausserhalb: er kann nicht
+  # in einen fremden Namespace port-forwarden, und ohne Weg dorthin bliebe das
+  # Ablegen beim Betreiber haengen.
+  #
+  # Ohne TLS. Damit geht das Anmelde-Token im Docker-Netz im Klartext - auf
+  # diesem Laptop vertretbar, wo der Entsiegelungsschluessel ohnehin danebenliegt,
+  # im Betrieb untragbar. Steht so in apps/GEHEIMNISSE.md.
   ingress:
-    enabled: false
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - host: openbao.k8s.127-0-0-1.nip.io
+        paths: []

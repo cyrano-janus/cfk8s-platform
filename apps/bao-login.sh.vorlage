@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Anmeldung am Geheimnisspeicher - fuer den Mandanten MANDANT.
+#
+# Diese Datei wird von `make apps-mandant` erzeugt und gehoert dem Mandanten,
+# nicht dem Repo. Sie enthaelt KEIN Geheimnis: das Token steht in der
+# Kubeconfig daneben, und von dort holt sie es.
+#
+# Benutzung:
+#     eval "$(./bao-login-MANDANT.sh)"
+#     bao kv put mandanten/MANDANT/dienst-x api_key=...
+#
+# Danach stehen BAO_ADDR und BAO_TOKEN in der Umgebung. Das Token gilt eine
+# Stunde; laeuft es ab, ruft man das Skript erneut auf.
+#
+# WARUM SO und nicht mit Benutzername und Passwort: Der Mandant hat sein
+# ServiceAccount-Token bereits in der Kubeconfig, und die Anmelderolle bei
+# OpenBao ist seit dem Anlegen an genau diesen ServiceAccount gebunden. Ein
+# zusaetzliches Passwort waere ein zweites Geheimnis, das verteilt, abgelegt
+# und irgendwann gewechselt werden muesste - drei Gelegenheiten, es zu
+# verlieren.
+set -euo pipefail
+
+KUBECONFIG_DATEI="${KUBECONFIG:-$(dirname "$0")/kubeconfig-MANDANT.yaml}"
+BAO_ADDR="${BAO_ADDR:-http://OPENBAO_HOST:APPS_HTTP_PORT}"
+ROLLE="MANDANT"
+
+[ -f "$KUBECONFIG_DATEI" ] || { echo "Kubeconfig nicht gefunden: $KUBECONFIG_DATEI" >&2; exit 1; }
+
+# Das Token aus der Kubeconfig - ohne kubectl, damit das Skript auch dort
+# laeuft, wo nur curl und python3 vorhanden sind.
+jwt=$(python3 - "$KUBECONFIG_DATEI" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+print(d["users"][0]["user"]["token"])
+PY
+) || { echo "kein Token in $KUBECONFIG_DATEI" >&2; exit 1; }
+
+antwort=$(curl -s --max-time 15 --fail-with-body \
+  -X POST "${BAO_ADDR}/v1/auth/kubernetes/login" \
+  -d "{\"role\":\"${ROLLE}\",\"jwt\":\"${jwt}\"}") || {
+    echo "Anmeldung bei ${BAO_ADDR} fehlgeschlagen:" >&2
+    echo "  ${antwort}" >&2
+    echo "  Laeuft OpenBao? Ist er entsiegelt? (make openbao-unseal)" >&2
+    exit 1; }
+
+tok=$(printf '%s' "$antwort" | python3 -c 'import json,sys; print(json.load(sys.stdin)["auth"]["client_token"])')
+
+# Zum `eval`: Die Ausgabe ist Shell-Code, keine Meldung. Deshalb geht alles
+# Erklaerende oben nach stderr und nur das hier nach stdout.
+echo "export BAO_ADDR='${BAO_ADDR}'"
+echo "export BAO_TOKEN='${tok}'"

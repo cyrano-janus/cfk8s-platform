@@ -77,12 +77,28 @@ if $K -n "${NS_BAO}" get pod openbao-0 >/dev/null 2>&1 \
                 env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN="$tokbao" "${@}"; }
 
   echo ">> Geheimnisspeicher"
-  # Die Policy nennt den Pfad zweimal: KV Version 2 legt Werte unter
-  # <mount>/data/<pfad> ab, seine Metadaten aber unter <mount>/metadata/<pfad>.
-  # Wer nur den ersten Pfad erlaubt, kann schreiben und lesen - aber nicht
-  # auflisten, und `bao kv list` scheitert mit permission denied.
-  printf 'path "mandanten/data/%s/*" { capabilities = ["create","read","update","delete","list"] }\npath "mandanten/metadata/%s/*" { capabilities = ["list","read","delete"] }\n' "$name" "$name" \
-    | bao_tok bao policy write "mandant-$name" - >/dev/null
+  # Fuenf Regeln, und jede fehlt einmal schmerzhaft:
+  #   data/<name>/*      Die Werte selbst - lesen UND SCHREIBEN. Der Mandant
+  #                      verwaltet sie selbst; der Betreiber ist nicht der
+  #                      Schalter, durch den jedes Passwort muss - und bekaeme
+  #                      dabei fremde Geheimnisse zu sehen.
+  #   metadata/<name>/*  Versionen und das Loeschen einzelner Eintraege. KV
+  #                      Version 2 legt Werte unter data/ ab, ihre Metadaten
+  #                      aber unter metadata/ - wer nur den ersten Pfad
+  #                      erlaubt, kann schreiben und lesen, aber nichts
+  #                      aufraeumen.
+  #   metadata/<name>    OHNE Stern: das Verzeichnis selbst. Ohne diese Zeile
+  #                      scheitert `bao kv list mandanten/<name>` - der Mandant
+  #                      kann schreiben und lesen, aber nicht sehen, WAS er hat.
+  #   sys/internal/ui/*  Nur fuer die Oberflaeche. Kostet nichts und erspart
+  #                      die Frage, warum sie leer aussieht.
+  bao_tok bao policy write "mandant-$name" - >/dev/null <<POLICY
+path "mandanten/data/${name}/*"     { capabilities = ["create","read","update","delete","list"] }
+path "mandanten/metadata/${name}/*" { capabilities = ["list","read","delete"] }
+path "mandanten/metadata/${name}"   { capabilities = ["list"] }
+path "sys/internal/ui/mounts"       { capabilities = ["read"] }
+path "sys/internal/ui/mounts/*"     { capabilities = ["read"] }
+POLICY
   bao_tok bao write "auth/kubernetes/role/$name" \
     bound_service_account_names="${name}-deployer" \
     bound_service_account_namespaces="$name" \
@@ -109,6 +125,17 @@ spec:
             name: ${name}-deployer
 EOF
   echo "   SecretStore 'openbao' im Namespace ${name}"
+
+  # Das Anmeldeskript neben die Kubeconfig. Es traegt kein Geheimnis - das
+  # Token steht in der Kubeconfig daneben, und von dort holt es sich das
+  # Skript. Erst damit wird die Selbstbedienung praktisch: ohne einen Weg,
+  # sich anzumelden, nuetzt dem Mandanten seine Schreibberechtigung nichts.
+  sed -e "s/MANDANT/${name}/g" \
+      -e "s/OPENBAO_HOST/${OPENBAO_HOST}/g" \
+      -e "s/APPS_HTTP_PORT/${APPS_HTTP_PORT}/g" \
+      apps/bao-login.sh.vorlage > "apps/bao-login-${name}.sh"
+  chmod +x "apps/bao-login-${name}.sh"
+  echo "   Anmeldeskript: apps/bao-login-${name}.sh"
 else
   echo "   (kein entsiegelter OpenBao - Geheimnisspeicher uebersprungen)"
 fi
@@ -118,3 +145,9 @@ echo "   Der Mandant benutzt sie so:"
 echo "     export KUBECONFIG=\"\$PWD/${ziel}\""
 echo "     kubectl get pods"
 echo "   Seine Adressen: http://<name>.${APPS_DOMAIN}:${APPS_HTTP_PORT}"
+if [ -f "apps/bao-login-${name}.sh" ]; then
+  echo
+  echo "   Seine Geheimnisse verwaltet er selbst:"
+  echo "     eval \"\$(./apps/bao-login-${name}.sh)\""
+  echo "     bao kv put mandanten/${name}/dienst-x api_key=..."
+fi

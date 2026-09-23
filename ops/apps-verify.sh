@@ -40,6 +40,13 @@ check "Ingress antwortet am Wirt (Port ${APPS_HTTP_PORT})" "404" \
 if $K -n "${OPENBAO_NAMESPACE}" get pod openbao-0 >/dev/null 2>&1; then
   check "OpenBao ist entsiegelt" "false" \
     "\$K -n $OPENBAO_NAMESPACE exec openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 bao status -format=json 2>/dev/null | python3 -c 'import json,sys; print(str(json.load(sys.stdin)[\"sealed\"]).lower())'"
+  # Der Weg von AUSSEN. Ein OpenBao, der im Cluster laeuft, aber von dort nicht
+  # erreichbar ist, laesst jeden Mandanten mit seiner Schreibberechtigung
+  # allein - und das faellt erst auf, wenn einer sie benutzen will.
+  # 200 heisst entsiegelt und bereit; 503 kaeme bei versiegelt, 000 bei keinem
+  # Weg.
+  check "OpenBao antwortet am Ingress (Port ${APPS_HTTP_PORT})" "200" \
+    "curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://${OPENBAO_HOST}:${APPS_HTTP_PORT}/v1/sys/health"
   check "External Secrets Operator bereit" "1" \
     "\$K -n external-secrets get deploy external-secrets -o jsonpath='{.status.readyReplicas}'"
 else

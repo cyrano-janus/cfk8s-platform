@@ -31,6 +31,7 @@ deshalb an, solange er zu ist.
 |---|---|
 | Adressen der Anwendungen | `http://<name>.k8s.127-0-0-1.nip.io:8080` |
 | Kubeconfig eines Mandanten | `apps/kubeconfig-<name>.yaml` (lokal, nie im Repo) |
+| Geheimnisspeicher | <http://openbao.k8s.127-0-0-1.nip.io:8080> |
 
 ## Warum die krummen Ports
 
@@ -67,10 +68,12 @@ diesem Laptop **nicht** leistet — dazu die Abgrenzung zu CredHub auf der
 CF-Seite: [GEHEIMNISSE.md](GEHEIMNISSE.md).
 
 Kurz: Jeder Mandant bekommt beim Anlegen einen eigenen Pfad
-`mandanten/<name>/`, eine Policy darauf und einen `SecretStore` in seinem
-Namespace. Werte legt der Betreiber ab (`make apps-geheimnis`), die Anwendung
-holt sie über ein `ExternalSecret` — in Git steht dann eine Referenz, nie ein
-Wert.
+`mandanten/<name>/`, eine Policy darauf, eine Anmelderolle, ein Anmeldeskript
+und einen `SecretStore` in seinem Namespace. **Werte legt er selbst ab** — mit
+dem Token, das ohnehin in seiner Kubeconfig steht; die Anwendung holt sie über
+ein `ExternalSecret`. In Git steht dann eine Referenz, nie ein Wert.
+
+`make apps-geheimnis` bleibt dem Betreiber für Übernahmen und Notfälle.
 
 ## Für Mandanten: [BEFEHLE.md](BEFEHLE.md)
 

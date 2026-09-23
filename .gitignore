@@ -20,3 +20,6 @@ samples/*/dist/
 # Die Kubeconfigs der Mandanten aus `make apps-mandant`. Jede traegt ein
 # gueltiges Token - sie gehoeren dem Mandanten, nicht dem Repo.
 apps/kubeconfig-*.yaml
+# Die Anmeldeskripte der Mandanten. Sie tragen kein Geheimnis, aber sie
+# entstehen je Mandant - was erzeugt wird, gehoert nicht ins Repo.
+apps/bao-login-*.sh

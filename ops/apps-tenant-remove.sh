@@ -52,5 +52,5 @@ except Exception:
 fi
 
 $K delete namespace "$name" --wait=true >/dev/null
-rm -f "apps/kubeconfig-${name}.yaml"
+rm -f "apps/kubeconfig-${name}.yaml" "apps/bao-login-${name}.sh"
 echo "   $name entfernt, Kubeconfig geloescht"
