@@ -25,10 +25,19 @@ check "Namespace der Instanzen vorhanden" "$INSTANCE_NAMESPACE" \
 
 # Ohne diese Regel provisioniert und bindet der Broker fehlerfrei, und die
 # Anwendung kommt trotzdem nicht an ihren Dienst - der Lebenszyklus ist gruen
-# und der Zweck verfehlt (FINDINGS #32). Eine ASG kann sie nicht ersetzen:
-# Cilium prueft gegen die Endpunkt-Identitaet, nicht gegen die Adresse.
-check "Egress cf-workloads -> Instanzen erlaubt" "cf-apps-to-backing-services" \
-  "\$K get ciliumclusterwidenetworkpolicy cf-apps-to-backing-services -o jsonpath='{.metadata.name}'"
+# und der Zweck verfehlt (FINDINGS #32). Eine ASG kann sie unter Cilium nicht
+# ersetzen: es prueft gegen die Endpunkt-Identitaet, nicht gegen die Adresse.
+#
+# Unter einer anderen CNI gibt es die Regel nicht, und ob sie dort ueberhaupt
+# noetig waere, ist ungemessen. Ein gruener Check waere hier so falsch wie ein
+# roter: die Frage ist offen, und genau das meldet der Lauf.
+if [ "${CNI:-cilium}" = "cilium" ]; then
+  check "Egress cf-workloads -> Instanzen erlaubt" "cf-apps-to-backing-services" \
+    "\$K get ciliumclusterwidenetworkpolicy cf-apps-to-backing-services -o jsonpath='{.metadata.name}'"
+else
+  skip "Egress cf-workloads -> Instanzen" \
+    "CNI=${CNI}: die Cilium-Umgehung entfaellt, ob eine ASG traegt ist offen (FINDINGS #32)"
+fi
 
 check "Broker-Service auf 443" "443" \
   "\$K -n $BROKER_NAMESPACE get svc $BROKER_FULLNAME -o jsonpath='{.spec.ports[0].port}'"

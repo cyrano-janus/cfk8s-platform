@@ -203,8 +203,20 @@ network:
 	@# die Service-Adresse. Eine ASG kennt nur CIDRs und kann diesen Weg
 	@# deshalb nicht oeffnen - auch nicht ueber einen LoadBalancer. Gemessen
 	@# in FINDINGS #32.
-	@$(KUBECTL) apply -f network/backing-services-egress.yaml >/dev/null
-	@echo "   Egress cf-workloads -> $(INSTANCE_NAMESPACE) erlaubt"
+	@#
+	@# Die Regel ist eine CiliumClusterwideNetworkPolicy: unter einer anderen
+	@# CNI fehlt die CRD, und `kubectl apply` braeche mit einer Meldung ueber
+	@# eine unbekannte Ressource ab, die niemanden auf den Grund stiesse.
+	@# Daher die Weiche. Unter Calico ist die Umgehung nicht nur unanwendbar,
+	@# sondern moeglicherweise unnoetig - ob dort die ASG allein traegt, ist
+	@# die offene Messung am Ende von FINDINGS #32.
+	@if [ "$(CNI)" != "cilium" ]; then \
+	   echo "   uebersprungen: CNI=$(CNI) - die Regel setzt Cilium voraus"; \
+	   echo "   ob eine ASG hier allein traegt, ist offen: FINDINGS #32"; \
+	 else \
+	   $(KUBECTL) apply -f network/backing-services-egress.yaml >/dev/null; \
+	   echo "   Egress cf-workloads -> $(INSTANCE_NAMESPACE) erlaubt"; \
+	 fi
 
 ## security-groups: Application Security Groups aus security-groups/ anwenden
 security-groups:
@@ -308,6 +320,13 @@ start:
 # aber nicht: der Zustand ist stabil falsch und heilt nicht durch Warten.
 # Gemessen in FINDINGS #33 - acht Stunden, ueber 350 Neustarts, unveraendert.
 netz-reparieren:
+	@# Die Behebung greift in Ciliums eigene Objekte ein. Unter einer anderen
+	@# CNI ist weder gemessen, ob der Befund auftritt, noch was ihn behebt -
+	@# ein Neustart fremder Pods waere geraten statt geprueft.
+	@if [ "$(CNI)" != "cilium" ]; then \
+	   echo "   CNI=$(CNI): fuer diese CNI ist weder der Befund noch seine"; \
+	   echo "   Behebung gemessen - siehe FINDINGS #33."; exit 1; \
+	 fi
 	@$(KUBECTL) -n kube-system rollout restart ds/cilium deploy/cilium-operator deploy/coredns >/dev/null
 	@echo ">> warte auf Cilium"
 	@$(KUBECTL) -n kube-system rollout status ds/cilium --timeout=5m
