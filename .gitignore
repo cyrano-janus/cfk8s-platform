@@ -15,3 +15,7 @@ access/kubeconfig-*.yaml
 # Gebaute Programme der Beispiele. `cf push` braucht sie, das Repo nicht -
 # sieben Megabyte, die sich bei jeder Aenderung vollstaendig unterscheiden.
 samples/*/dist/
+
+# Die Kubeconfigs der Mandanten aus `make apps-mandant`. Jede traegt ein
+# gueltiges Token - sie gehoeren dem Mandanten, nicht dem Repo.
+apps/kubeconfig-*.yaml

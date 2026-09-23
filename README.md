@@ -117,6 +117,7 @@ war: liegt er in den ersten Minuten nach dem Boot, ist die Komponente gesund
 | `broker/` | Chart-Werte; `values.local.yaml` trägt das Passwort und bleibt lokal |
 | `ops/` | Werkzeuge: Katalog abfragen, verwaiste Einträge aufräumen, Konformität, Status |
 | `observability/` | Ein **zweiter** kind-Cluster mit Prometheus und Grafana, der diesen hier misst |
+| `apps/` | Ein **dritter** kind-Cluster für Anwendungen, die Nutzern gehören — er überdauert `make down` |
 | `verify/` | Akzeptanzprüfungen, read-only, Sekunden |
 | `FINDINGS.md` | Das Messprotokoll: Beobachtung, verifizierte Ursache, Vorschlag |
 

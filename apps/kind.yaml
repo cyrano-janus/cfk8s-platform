@@ -1,0 +1,21 @@
+# Der Anwendungs-Cluster: ein Knoten reicht.
+#
+# Die Portzuordnung ist der Grund fuer die krummen Nummern: 80 und 443 am Wirt
+# gehoeren Cloud Foundry in cfk8s. Ein zweiter Cluster kann sie nicht auch
+# belegen, also liegen die Anwendungen hier auf 8080 und 8443.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    # Das Label ist kein Schmuck: ingress-nginx waehlt seinen Knoten danach
+    # aus. Ohne es bleibt der Controller-Pod fuer immer "Pending", ohne dass
+    # irgendwo steht, warum.
+    labels:
+      ingress-ready: "true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP

@@ -349,6 +349,30 @@ netz-reparieren:
 	   || { echo "   DNS antwortet NICHT - der Befund ist ein anderer, siehe FINDINGS #33"; exit 1; }
 	@echo "   Die CF-Komponenten brauchen danach einige Minuten; make status zeigt es."
 
+# ---------------------------------------------------------------- Anwendungen
+
+## apps-up: Anwendungs-Cluster fuer Nutzer (eigener Cluster, ueberdauert `down`)
+apps-up:
+	@ops/apps-up.sh
+
+## apps-mandant: Namespace, Rechte und Kubeconfig fuer einen Mandanten (NAME=...)
+apps-mandant:
+	@ops/apps-tenant.sh "$(NAME)"
+
+## apps-mandant-weg: Mandanten samt Anwendungen und Datenbanken entfernen (NAME=...)
+apps-mandant-weg:
+	@ops/apps-tenant-remove.sh "$(NAME)"
+
+## apps-verify: traegt der Anwendungs-Cluster? Prueft den Weg, nicht die Pods
+apps-verify:
+	@ops/apps-verify.sh
+
+## apps-down: Anwendungs-Cluster loeschen (Anwendungen der Nutzer sind dann weg)
+apps-down:
+	@printf '   loescht Cluster %s samt allem, was Mandanten darin betreiben. Weiter? [j/N] ' "$(APPS_CLUSTER_NAME)"
+	@read -r a; [ "$$a" = "j" ] || { echo "   abgebrochen"; exit 1; }
+	@kind delete cluster --name $(APPS_CLUSTER_NAME)
+
 # ---------------------------------------------------------------- Observability
 
 ## obs-up: Observability-Cluster mit Prometheus und Grafana (eigener Cluster!)
@@ -390,4 +414,4 @@ down: cf-clone cf-link
 
 .PHONY: help cf-clone cf-link cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren obs-up obs-scrape obs-host obs-dashboards obs-verify obs-down down
+        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren apps-up apps-mandant apps-mandant-weg apps-verify apps-down obs-up obs-scrape obs-host obs-dashboards obs-verify obs-down down

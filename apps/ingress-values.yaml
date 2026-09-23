@@ -1,0 +1,38 @@
+# Werte fuer ingress-nginx in einem kind-Cluster.
+#
+# Der Controller laeuft mit hostPort statt hinter einem LoadBalancer: kind
+# bringt keinen mit, und ein Service vom Typ LoadBalancer bliebe ewig
+# "pending". Ueber hostPort erreicht der Verkehr vom Wirt (8080/8443) den
+# Controller im Knoten (80/443).
+controller:
+  hostPort:
+    enabled: true
+    ports:
+      http: 80
+      https: 443
+  service:
+    type: ClusterIP
+  nodeSelector:
+    ingress-ready: "true"
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Equal
+      effect: NoSchedule
+  # Ein Knoten, ein Controller - mehr Repliken haetten keinen Platz und
+  # blieben Pending.
+  replicaCount: 1
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    # DER STANDARD - sonst bleibt jeder Ingress ohne ausdrueckliche Klasse
+    # unbedient, und zwar lautlos: der Controller ignoriert ihn, und der Aufruf
+    # endet in einem 404, das wie ein Tippfehler in der Adresse aussieht.
+    # Gemessen genau so, beim ersten Mandanten-Versuch. Ein Mandant soll
+    # `kubectl create ingress ...` tippen koennen, ohne eine Klasse zu kennen.
+    default: true
+  admissionWebhooks:
+    # Der Webhook prueft Ingress-Objekte beim Anlegen. In einem
+    # Entwicklungscluster kostet er beim Aufbau mehr Zeit, als er an
+    # Tippfehlern spart - und ein halb gestarteter Webhook laesst jedes
+    # `kubectl apply` eines Ingress auflaufen.
+    enabled: false
