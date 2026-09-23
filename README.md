@@ -73,17 +73,33 @@ CF-Anwendungen brauchen Anläufe — `nfsbroker` etwa fing sich beim fünften
 Neustart, eine gepushte App war nach wenigen Minuten wieder da. Wer sofort
 prüft, sieht Rot, das keines ist.
 
-**Nach einem ungeplanten Neustart des Wirts gilt das Gegenteil:**
-
-```
-make netz-reparieren
-```
-
-Docker vergibt den Knoten-Containern dann neue Adressen, Cilium findet die
-Knoten nicht wieder, und keine CF-Komponente löst mehr einen Namen auf. Das
+**Nach einem Neustart des Wirts entscheidet eine Prüfung, welcher Fall vorliegt.**
+Manchmal vergibt Docker den Knoten-Containern neue Adressen; Cilium findet die
+Knoten dann nicht wieder, und keine CF-Komponente löst mehr einen Namen auf. Das
 sieht aus wie Anlaufschwierigkeiten, ist aber stabil falsch und heilt **nicht**
 durch Warten — gemessen acht Stunden und über 350 Neustarts lang (FINDINGS #33).
-Wer hier Geduld übt, übt sie unbegrenzt.
+Es passiert aber **nicht** bei jedem Neustart. Welcher Fall vorliegt, sagen zwei
+Befehle:
+
+```
+kubectl --context kind-cfk8s get nodes -o custom-columns=\
+  'NAME:.metadata.name,IP:.status.addresses[?(@.type=="InternalIP")].address'
+docker inspect -f '{{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+  cfk8s-control-plane cfk8s-worker cfk8s-worker2
+```
+
+Weichen die Listen ab, ist `make netz-reparieren` fällig, und Warten hilft nie.
+Stimmen sie überein, ist Warten genau richtig — dann steht die Plattform nach
+rund 20 Minuten von selbst.
+
+**Restart-Zähler nach einem Neustart des Wirts sind kein Befund.** Alle Pods
+zeigen `Exit Code 255` / `Reason: Unknown` zur Sekunde des Herunterfahrens, und
+die Zähler wachsen mit jedem Boot: Komponenten ohne Startabhängigkeit um eins,
+der `cloud-controller` um rund zwanzig, weil CF die BOSH-Startreihenfolge
+erwartet und auf Kubernetes alles gleichzeitig hochkommt. Dreistellige Zähler
+sind nach ein paar Wochen normal. Was zählt, ist **wann** der letzte Neustart
+war: liegt er in den ersten Minuten nach dem Boot, ist die Komponente gesund
+(FINDINGS #33, Nachtrag).
 
 ## Aufbau
 

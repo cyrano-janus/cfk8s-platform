@@ -1167,6 +1167,30 @@ verborgen lag:
 > Cilium „außen", und erst dann greift die ASG. Das ist eine Entscheidung über
 > die Bauform der Entwicklungsplattform, keine Zeile Konfiguration.
 
+### Nachtrag: der Upstream bietet seit v0.24.0 Calico an — die Frage wird messbar
+
+Aufgenommen am 2026-09-23. `cloudfoundry/kind-deployment` hat mit `c3d6df4`
+(Tag `v0.24.0`, 2026-09-08) **Calico als alternative CNI** aufgenommen; bis
+dahin gab es nur Cilium.
+
+Das berührt die Wurzel dieses Befundes. Er hängt nicht an Cloud Foundry und
+nicht am Broker, sondern daran, **wie Cilium prüft**: gegen die
+Endpunkt-Identität des Ziel-Pods, die eine CIDR-Regel nie trifft. Calico prüft
+gegen Adressen. Ob eine Application Security Group damit trägt, ohne dass
+`network/backing-services-egress.yaml` sie ersetzen muss, ist deshalb zum ersten
+Mal prüfbar, ohne etwas nachzubauen.
+
+**Das ist eine Hypothese, kein Befund.** Gemessen ist bisher nichts. Sie steht
+hier, damit der offene Punkt am Ende von #32 eine Adresse hat: Vor der
+Entscheidung über einen Weiterleiter außerhalb des Clusters ist ein Lauf gegen
+Calico der billigere Versuch.
+
+Was er **nicht** beantwortet: Auf Tanzu TAS liegt die Anwendung auf einer
+BOSH-VM und der Cluster daneben. Ein Erfolg mit Calico machte die ASG hier
+wirksam — er sagte nichts darüber, ob die vom Broker ausgelieferte
+clusterinterne Adresse dort erreichbar wäre. Der Befund fiele damit nicht weg,
+nur seine Umgehung.
+
 ---
 
 ## #33 — Nach einem Neustart des *Wirts* findet Cilium die Knoten nicht wieder
@@ -1242,3 +1266,48 @@ zurückkam und den man auf halbem Weg für einen eigenen Defekt halten kann.
 Betriebshälfte. Kein TAS läuft auf kind, und keine BOSH-VM bekommt beim Neustart
 des Wirts eine neue Adresse von Docker. Er steht hier, weil er die
 Entwicklungsplattform acht Stunden gekostet hat, nicht als Aussage über CF.
+
+### Nachtrag: nicht jeder Neustart des Wirts löst das aus — gemessen
+
+Aufgenommen am 2026-09-23. Der Befund oben liest sich, als zerlege jeder
+Neustart der Maschine das Netz. Das stimmt nicht, und die Verwechslung ist
+teuer: Sie lässt das gewöhnliche Anlaufbild nach dem Einschalten wie einen
+Defekt aussehen.
+
+**Der Wirt ist ein Laptop, der abends heruntergefahren wird.** Am 2026-09-23
+war der Cluster 20 Boots alt, und das Bild am Morgen war dieses:
+
+- Alle Pods zeigten `Exit Code 255`, `Reason: Unknown`, beendet zur Sekunde des
+  Herunterfahrens. Das ist kein Absturz, sondern der Weg, auf dem systemd die
+  Docker-Container beendet.
+- Die Restart-Zähler sind Vielfache der Boot-Zahl: neun Pods standen auf genau
+  **14**, drei auf **28**, einer auf **42**.
+- Die dreistelligen Zähler — `cloud-controller` 416, `policy-server` 370,
+  `routing-api` 260 — sind Anlaufserien, keine kranken Komponenten. CF erwartet
+  die BOSH-Reihenfolge; auf Kubernetes startet alles gleichzeitig, und jede
+  Komponente stirbt so lange, bis ihre Gegenstelle antwortet. 416 / 20 Boots
+  sind rund 20 Versuche pro Morgen.
+- **Alle** Vielstarter hatten ihren letzten Neustart innerhalb der ersten vier
+  Minuten nach dem Boot und liefen danach stabil.
+
+**Die Unterscheidung liegt an einer Stelle, und die ist in Sekunden geprüft:**
+
+```
+kubectl --context kind-cfk8s get nodes -o custom-columns=\
+  'NAME:.metadata.name,IP:.status.addresses[?(@.type=="InternalIP")].address'
+docker inspect -f '{{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+  cfk8s-control-plane cfk8s-worker cfk8s-worker2
+```
+
+Stimmen die beiden Listen überein, hat Docker dieselben Adressen wieder
+vergeben und #33 liegt **nicht** vor — dann ist Warten richtig. Weichen sie ab,
+ist `make netz-reparieren` fällig, und Warten hilft nie. Am 2026-09-23 stimmten
+sie (`172.18.0.2/3/4`), die `ciliumnodes` trugen dieselben Adressen, und nach
+rund 20 Minuten stand die Plattform ohne Eingriff.
+
+**Offen geblieben:** `nfsbroker` fing sich auch danach nicht. Er scheitert an
+`Get "https://credhub.cf-system.svc.cluster.local:8844/info": context deadline
+exceeded` — zu einem Zeitpunkt, zu dem CredHub seit zwölf Minuten bereit war und
+derselbe Name aus einem Nachbar-Pod auf demselben Knoten auflöst und Port 8844
+offen ist. Ursache nicht ermittelt. Der nfsbroker wird hier nicht gebraucht; der
+Punkt steht, damit er nicht jedes Mal neu untersucht wird.
