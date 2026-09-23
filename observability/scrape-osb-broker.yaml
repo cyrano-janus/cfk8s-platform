@@ -1,0 +1,40 @@
+# Prometheus holt die Metriken des Brokers aus dem NACHBARCLUSTER.
+#
+# Kein ServiceMonitor: der waehlt Kubernetes-Services im eigenen Cluster aus,
+# und der Broker laeuft in einem anderen. Ein ScrapeConfig mit festem Ziel ist
+# die Form fuer alles, was nicht hier liegt.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: osb-broker
+  namespace: observability
+spec:
+  staticConfigs:
+    # `cfk8s-control-plane` ist ein Docker-DNS-Name, keine IP. Beide kind-
+    # Cluster haengen im Netz "kind", in dem Docker die Container-Namen
+    # aufloest. Nach einem Neustart des Wirts vergibt Docker neue Adressen
+    # (FINDINGS #33) - die Namen bleiben. Eine eingetragene IP waere nach dem
+    # ersten Neustart still falsch.
+    - targets:
+        - cfk8s-control-plane:30443
+      labels:
+        cluster: cfk8s
+        component: osb-broker
+  metricsPath: /metrics
+  scheme: HTTPS
+  scrapeInterval: 30s
+  tlsConfig:
+    # Echte Pruefung, kein insecureSkipVerify. Die Plattform-CA liegt als
+    # Secret hier - `make obs-ca` holt sie aus cert-manager im
+    # Plattform-Cluster und kopiert AUSSCHLIESSLICH ca.crt herueber; das
+    # Quell-Secret enthaelt auch den privaten Schluessel der CA.
+    ca:
+      secret:
+        name: cfk8s-platform-ca
+        key: ca.crt
+    # Verbunden wird zum Knotennamen, geprueft gegen den Namen im Zertifikat.
+    # Das Broker-Zertifikat traegt nur clusterinterne Namen
+    # (osb-broker.osb-broker.svc...), und cfk8s-control-plane steht nicht
+    # darin. Ohne diese Zeile schluege die Pruefung fehl - mit ihr bleibt sie
+    # eine echte Pruefung, statt abgeschaltet zu werden.
+    serverName: osb-broker.osb-broker.svc

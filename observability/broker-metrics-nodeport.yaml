@@ -1,0 +1,34 @@
+# Der Weg von aussen an die Metriken des Brokers.
+#
+# Diese Ressource gehoert in den PLATTFORM-Cluster (kind-cfk8s), nicht in den
+# Observability-Cluster: sie oeffnet dort einen Knotenport, den Prometheus vom
+# Nachbarn aus abfragt. Der regulaere Service des Brokers ist eine ClusterIP
+# und von ausserhalb des Clusters nicht erreichbar.
+#
+# Ein zweiter Service statt einer Aenderung am bestehenden: der Broker-Service
+# gehoert dem Helm-Release des Brokers. Wer ihn hier umbaut, verliert die
+# Aenderung beim naechsten `make broker` - oder haelt zwei Quellen fuer
+# dieselbe Ressource.
+apiVersion: v1
+kind: Service
+metadata:
+  name: osb-broker-metrics
+  namespace: osb-broker
+  labels:
+    app.kubernetes.io/name: osb-broker-go
+    app.kubernetes.io/component: metrics
+spec:
+  type: NodePort
+  # Dieselben Labels, die der Broker-Service auswaehlt - nachgesehen, nicht
+  # geraten.
+  selector:
+    app.kubernetes.io/instance: osb-broker-go
+    app.kubernetes.io/name: osb-broker-go
+  ports:
+    - name: metrics
+      port: 443
+      targetPort: https
+      # Muss zu BROKER_METRICS_NODEPORT in versions.env passen, denn die
+      # ScrapeConfig nennt die Nummer wieder.
+      nodePort: 30443
+      protocol: TCP

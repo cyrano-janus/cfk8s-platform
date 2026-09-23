@@ -1,0 +1,80 @@
+# Werte fuer kube-prometheus-stack. Was hier ABGESCHALTET ist, ist so wichtig
+# wie das Eingeschaltete: der Stack misst per Voreinstellung den Cluster, in
+# dem er laeuft - und das ist hier der falsche. Die Signale, um die es geht,
+# kommen aus kind-cfk8s.
+
+# Der Alertmanager braucht einen Empfaenger, um etwas zu tun. Solange keiner
+# benannt ist, waere er Dekoration mit Speicherbedarf.
+alertmanager:
+  enabled: false
+
+# Beide messen diesen Cluster: seine Knoten, seine Objekte. Beobachtet werden
+# soll aber der Nachbar. Wer sie anlaesst, fuellt Grafana mit Kurven ueber den
+# Beobachter selbst und haelt das fuer Monitoring.
+nodeExporter:
+  enabled: false
+kubeStateMetrics:
+  enabled: false
+kubeApiServer:
+  enabled: false
+kubelet:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+coreDns:
+  enabled: false
+
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30900
+  prometheusSpec:
+    # OHNE DIESE ZEILEN IST ALLES WEG, SOBALD DER POD NEU STARTET. Der
+    # Vorgaenger schrieb in ein emptyDir und hatte 54 Neustarts hinter sich -
+    # die eingestellte Aufbewahrungsfrist war damit gegenstandslos.
+    retention: 30d
+    retentionSize: 8GB
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard   # local-path, kind bringt es mit
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # Der Stack setzt per Voreinstellung Selektoren, die nur seine eigenen
+    # Objekte auswaehlen. Ein ScrapeConfig, das von Hand danebengelegt wird,
+    # faende er dann nie - und meldete keinen Fehler, sondern null Ziele.
+    scrapeConfigSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+grafana:
+  service:
+    type: NodePort
+    nodePort: 30300
+  # Das Passwort steht in observability/values.local.yaml, nicht hier.
+  persistence:
+    enabled: true
+    storageClassName: standard
+    size: 2Gi
+  # Die Datenquelle richtet das Chart selbst ein und zeigt auf den Prometheus
+  # dieses Releases.
+  sidecar:
+    dashboards:
+      enabled: true
+    datasources:
+      enabled: true
+  # Die mitgelieferten Kubernetes-Dashboards zeigen auf Metriken, die hier
+  # niemand einsammelt (kube-state-metrics ist aus). Leere Kurven sind
+  # schlimmer als keine: sie sehen aus wie ein Messwert.
+  defaultDashboardsEnabled: false

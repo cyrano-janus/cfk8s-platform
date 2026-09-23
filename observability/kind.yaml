@@ -1,0 +1,20 @@
+# Der Observability-Cluster: ein Knoten, mehr braucht ein Beobachter nicht.
+#
+# Er liegt bewusst NEBEN der Plattform und nicht in ihr. `make down` loescht
+# cfk8s vollstaendig; was dort gemessen wurde, waere mit gemessen worden und
+# mit geloescht. Ein Beobachter, der mit dem Beobachteten stirbt, kann ueber
+# Laeufe hinweg nichts aussagen.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    # Beide Oberflaechen sollen vom Wirt aus erreichbar sein, ohne dass jemand
+    # einen port-forward offen halten muss - ein port-forward ueberlebt weder
+    # das Schliessen des Terminals noch einen Neustart des Pods.
+    extraPortMappings:
+      - containerPort: 30300   # Grafana
+        hostPort: 3000
+        protocol: TCP
+      - containerPort: 30900   # Prometheus
+        hostPort: 9090
+        protocol: TCP

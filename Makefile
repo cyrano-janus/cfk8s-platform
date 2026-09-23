@@ -38,6 +38,12 @@ CF_DIR  := cf/kind-deployment
 # Den Upstream zu patchen scheidet aus: er wird hier aufgerufen, nicht nachgebaut
 # (CLAUDE.md, Regel 4), und ein Patch waere nach dem naechsten cf-clone weg.
 CF_LINK := $(HOME)/.cache/cfk8s-upstream
+
+# Der Observability-Cluster ist ein ZWEITER Cluster. Jeder Zugriff dorthin
+# nennt seinen eigenen Kontext - dieselbe Regel wie fuer die Plattform, nur
+# ein anderes Ziel. Die Skripte in ops/ tun es ebenso.
+OBS_CTX     := kind-$(OBS_CLUSTER_NAME)
+OBS_KUBECTL := kubectl --context $(OBS_CTX)
 CM_URL  := https://github.com/cert-manager/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
 CF_API  := https://api.cf.127-0-0-1.nip.io
 
@@ -368,6 +374,29 @@ netz-reparieren:
 	   || { echo "   DNS antwortet NICHT - der Befund ist ein anderer, siehe FINDINGS #33"; exit 1; }
 	@echo "   Die CF-Komponenten brauchen danach einige Minuten; make status zeigt es."
 
+# ---------------------------------------------------------------- Observability
+
+## obs-up: Observability-Cluster mit Prometheus und Grafana (eigener Cluster!)
+obs-up:
+	@ops/obs-up.sh
+
+## obs-scrape: Knotenport, Plattform-CA und ScrapeConfig - der Weg zum Broker
+obs-scrape:
+	@ops/obs-scrape.sh
+
+## obs-verify: misst Prometheus wirklich? Fragt die Ziele, nicht die Pods
+obs-verify:
+	@ops/obs-verify.sh
+
+## obs-down: Observability-Cluster loeschen (Messreihen sind dann weg)
+obs-down:
+	@# Kein `kind delete` ohne Nachfrage: hier liegen die einzigen Daten, die
+	@# einen Neuaufbau der Plattform ueberdauern. Wer sie wegwirft, soll es
+	@# gesagt haben.
+	@printf '   loescht Cluster %s samt aller Messreihen. Weiter? [j/N] ' "$(OBS_CLUSTER_NAME)"
+	@read -r a; [ "$$a" = "j" ] || { echo "   abgebrochen"; exit 1; }
+	@kind delete cluster --name $(OBS_CLUSTER_NAME)
+
 ## status: Ist-Zustand auf einen Blick
 status:
 	@ops/status.sh
@@ -378,4 +407,4 @@ down: cf-clone cf-link
 
 .PHONY: help cf-clone cf-link cf-up cf-login deps pki services broker broker-image broker-crds \
         broker-definitions broker-deploy dev-broker broker-catalog broker-catalog-prune \
-        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren down
+        register unregister instance-namespace network security-groups cf-tools verify verify-restart cf-smoke conformance stop start status netz-reparieren obs-up obs-scrape obs-verify obs-down down

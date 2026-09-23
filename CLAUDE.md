@@ -12,11 +12,16 @@ Befund hier ist deshalb eine Aussage über das Zielsystem, kein Hinweis.
 
 1. **Nie ohne Kontext.** Jeder Cluster-Zugriff trägt `--context kind-cfk8s`
    (`kubectl`) bzw. `--kube-context kind-cfk8s` (`helm`). Es existiert ein
-   zweiter kind-Cluster `prometheus` mit dem Monitoring des Nutzers. Ein
+   zweiter kind-Cluster `observability` mit Prometheus und Grafana. Ein
    falscher `current-context` trifft sonst diesen. Das Makefile macht es über
-   `$(KUBECTL)` und `$(HELM)` durchgängig — neue Aufrufe genauso.
-2. **`prometheus` nie löschen oder neu aufsetzen.** Er ist als Metrikziel für
-   diese Plattform und den Broker vorgesehen; wie, ist noch zu spezifizieren.
+   `$(KUBECTL)` und `$(HELM)` durchgängig, für den zweiten Cluster über
+   `$(OBS_KUBECTL)` — neue Aufrufe genauso.
+2. **Der Cluster `observability` wird nicht nebenbei gelöscht.** Er misst
+   diese Plattform und den Broker ([observability/](observability/README.md))
+   und ist der einzige Ort, dessen Daten einen Neuaufbau überdauern — deshalb
+   liegt er neben der Plattform und nicht in ihr. `make obs-down` fragt nach,
+   bevor es Messreihen wegwirft; ein `kind delete cluster` von Hand tut das
+   nicht.
 3. **Die CNI steht in `versions.env`, und sie entscheidet mit.** Diese
    Plattform fährt `CNI=calico`. Unter Cilium gilt FINDINGS #32 — eine ASG
    öffnet den Weg einer App zu ihrem Dienst nicht —, unter Calico nicht. Wer

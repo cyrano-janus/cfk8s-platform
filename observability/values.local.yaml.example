@@ -1,0 +1,4 @@
+# Kopieren nach observability/values.local.yaml und ein Passwort setzen.
+# Die Datei bleibt lokal (.gitignore) - ein Passwort im Repo ist keines.
+grafana:
+  adminPassword: bitte-aendern

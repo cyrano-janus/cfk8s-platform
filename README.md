@@ -116,8 +116,31 @@ war: liegt er in den ersten Minuten nach dem Boot, ist die Komponente gesund
 | `services/*/service.env` | Ein Operator ist ein Verzeichnis mit einer Datei |
 | `broker/` | Chart-Werte; `values.local.yaml` trägt das Passwort und bleibt lokal |
 | `ops/` | Werkzeuge: Katalog abfragen, verwaiste Einträge aufräumen, Konformität, Status |
+| `observability/` | Ein **zweiter** kind-Cluster mit Prometheus und Grafana, der diesen hier misst |
 | `verify/` | Akzeptanzprüfungen, read-only, Sekunden |
 | `FINDINGS.md` | Das Messprotokoll: Beobachtung, verifizierte Ursache, Vorschlag |
+
+## Messen
+
+Ein **eigener** kind-Cluster daneben, nicht ein Namespace in diesem:
+
+```
+make obs-up       # Cluster, Prometheus, Grafana
+make obs-scrape   # der Weg zu den Metriken des Brokers
+make obs-verify   # misst er wirklich?
+```
+
+Prometheus auf <http://127.0.0.1:9090>, Grafana auf <http://127.0.0.1:3000>.
+
+Der Grund für den eigenen Cluster steht in
+[`observability/README.md`](observability/README.md) und ist kurz: `make down`
+löscht diese Plattform vollständig. Ein Beobachter, der mit dem Beobachteten
+stirbt, kann über Läufe hinweg nichts aussagen.
+
+`make obs-verify` fragt Prometheus nach seinen **Zielen**, nicht nach seinen
+Pods. Der Vorgänger dieses Clusters lief 25 Tage fehlerfrei und maß nichts,
+weil ein ServiceMonitor auf einen Portnamen zeigte, den es nicht gab — alle
+Pods grün, null Ziele, keine Fehlermeldung.
 
 ## Was hier belegt wird — und was nicht
 
