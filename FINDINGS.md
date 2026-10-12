@@ -1365,3 +1365,95 @@ Punkt steht, damit er nicht jedes Mal neu untersucht wird.
 Eingegrenzt ist er immerhin: Im frisch gebauten Cluster desselben Tages kam er
 ohne Zutun hoch — 34 von 34 Pods. Der Zustand entsteht also beim Wiederanlauf
 nach dem Neustart des Wirts, nicht beim Aufbau.
+
+---
+
+## #34 — Nach einem Neustart des *Wirts* steht Calico still, weil es kube-proxy ersetzt
+
+Aufgenommen am 2026-10-12. Das Calico-Gegenstück zu #33 und aus derselben
+Quelle — ein Neustart der Maschine —, aber mit anderer Ursache und anderem
+Ausgang: #33 beschreibt Cilium und ist mit `make netz-reparieren` zu beheben,
+ein Target, das unter Calico nicht anwendbar ist.
+
+**Beobachtung:** Anderthalb Stunden nach dem Hochfahren stehen 50 von 57 Pods
+auf `Unknown`, während die Knoten `Ready` melden und die Container seit einer
+Stunde laufen. `make broker` bricht ab:
+
+```
+Error: UPGRADE FAILED: cannot patch "osb-broker" with kind Certificate:
+failed calling webhook "webhook.cert-manager.io": context deadline exceeded
+```
+
+Der Webhook ist nicht schuld — sein Service hat keine Endpunkte, weil sein Pod
+zu den 50 gehört. Alle lebenden Calico-Komponenten scheitern an derselben
+Adresse:
+
+```
+dial tcp 10.96.0.1:443: connect: connection refused
+```
+
+**Verifizierte Ursache, in vier Schritten.** Erstens, der Endpunkt ist richtig
+und nicht veraltet — anders als bei #33 liegt es *nicht* an neu vergebenen
+Docker-Adressen:
+
+```
+$ kubectl get endpoints kubernetes       -> 172.18.0.12:6443
+$ docker inspect cfk8s-control-plane     -> 172.18.0.12
+$ docker exec cfk8s-control-plane ss -ltn | grep 6443   -> kube-apiserver lauscht
+```
+
+Zweitens, niemand übersetzt die ClusterIP. kube-proxy ist abgeschaltet, und
+zwar absichtlich:
+
+```
+$ kubectl get ds -n kube-system kube-proxy
+NAME         DESIRED   NODE SELECTOR
+kube-proxy   0         operator.tigera.io/disable-kube-proxy=true
+$ docker exec cfk8s-control-plane iptables-save | grep -c 10.96.0.1
+0
+```
+
+Drittens, der Grund steht in der Installation: `linuxDataplane: BPF`. Calico
+fährt im eBPF-Modus und übernimmt die Aufgabe von kube-proxy selbst. Läuft
+`calico-node` nicht, übersetzt niemand `10.96.0.1`.
+
+Viertens, daraus wird ein Ring: `tigera-operator` und `calico-typha` brauchen
+`10.96.0.1`, um zu starten — also genau das, was erst entsteht, wenn
+`calico-node` läuft. Der Ring schließt sich, sobald alle Calico-Pods gleichzeitig
+tot sind, und öffnet sich nicht von allein: nach anderthalb Stunden stand
+`calico-typha` bei 186 Neustarts, `tigera-operator` bei 199.
+
+**Was NICHT hilft, und warum das festgehalten gehört.** Der dokumentierte
+Calico-Ausweg aus diesem Ring ist ein ConfigMap `kubernetes-services-endpoint`
+im Namespace `tigera-operator`, das den Komponenten die Knotenadresse statt der
+ClusterIP gibt; der Operator liest es über `envFrom` (`optional: true`). Es
+wurde angelegt und der Operator neu gestartet. Der Operator läuft danach
+tatsächlich durch — der Fehler wandelt sich von `connection refused` zu
+Antwortfehlern des API-Servers —, aber er verweigert die Arbeit:
+
+```
+bpfNetworkBootstrap is Enabled but the requirements are not met:
+kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap
+```
+
+Diese Installation trägt `bpfNetworkBootstrap: Enabled` — Calico bringt für
+genau dieses Henne-Ei-Problem einen eigenen Mechanismus mit, und das ConfigMap
+schaltet ihn ab. Der dokumentierte Ausweg ist hier also der falsche.
+
+**Was half:** die Pods im Zustand `Unknown` zu entfernen. Sie sind Leichen, die
+niemand ersetzt — `status.phase` steht auf `Running`, nur ihre Conditions sind
+unbekannt, weshalb auch `--field-selector=status.phase!=Running` sie nicht
+findet. Nach `kubectl delete pod --all --force --grace-period=0` in
+`calico-system` kam `calico-typha` hoch, nach dem Rücknehmen des ConfigMaps
+auch `calico-node`, und danach erholte sich der Cluster ohne weiteres Zutun:
+50 `Unknown` wurden zu 50 `Running`, CF eingeschlossen.
+
+**Nicht belegt — und das ist die offene Stelle dieses Befundes:** ob das
+Wegräumen der Leichen allein genügt hätte. Das ConfigMap war zwischenzeitlich
+gesetzt, als `calico-typha` hochkam. Die Gegenprobe verlangt einen zweiten
+Kaltstart mit nur diesem einen Schritt; bis dahin ist die Reihenfolge
+"Leichen weg, ConfigMap nie anlegen" eine Vermutung.
+
+**Vorschlag:** `make netz-reparieren-calico` räumt die Pods ohne Conditions
+weg — ohne ConfigMap, denn das ist hier nachweislich schädlich. Das Target
+trägt den Vermerk, dass seine Wirkung erst am nächsten Kaltstart gemessen ist.

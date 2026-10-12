@@ -267,6 +267,16 @@ security-groups:
 	 done
 	@echo "   global gebunden. Wirkt fuer laufende Apps erst nach einem Neustart."
 
+## netz-reparieren-calico: nach einem Neustart des Wirts - Calico wieder in Gang
+#
+# Das Gegenstueck zu netz-reparieren fuer die CNI, die diese Plattform fährt.
+# Anderer Befund, andere Behebung: unter Calico sind die Adressen richtig, aber
+# niemand uebersetzt die ClusterIP, weil kube-proxy dem eBPF-Dataplane
+# gewichen ist (FINDINGS #34). Das Rezept steht in ops/, weil es ueber Pods
+# iteriert und Make dafuer die falsche Sprache ist.
+netz-reparieren-calico:
+	@ops/netz-reparieren-calico.sh
+
 # ---------------------------------------------------------------- Anwendungen
 
 ## verify: alle Akzeptanz-Checks der Reihe nach (read-only, Sekunden)
