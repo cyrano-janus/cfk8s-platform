@@ -33,11 +33,42 @@ helm repo update openbao >/dev/null
 # KEIN --wait: der Pod wird nie bereit, solange OpenBao versiegelt ist. Seine
 # Bereitschaftspruefung meldet genau das - und ein Helm, das darauf wartet,
 # liefe in jedem frischen Aufbau in den Timeout.
+#
+# Das Image wird hier ausdruecklich gesetzt und kommt nicht aus dem Chart.
+# Das ist keine Stilfrage: das Chart dieser Linie traegt 2.6.3, und drei
+# Luecken schliessen erst mit 2.6.4. In voller Laenge steht der Grund bei
+# OPENBAO_VERSION in versions.env.
 $H upgrade --install openbao openbao/openbao \
   --version "${OPENBAO_CHART_VERSION}" \
+  --set server.image.tag="${OPENBAO_VERSION}" \
   --namespace "${NS}" --create-namespace \
   -f apps/openbao-values.yaml >/dev/null
 echo "   ausgerollt (der Pod bleibt unbereit, solange versiegelt - das ist richtig so)"
+
+# Das Chart setzt `updateStrategy: OnDelete`. Der StatefulSet-Controller
+# ersetzt den Pod dann NICHT von selbst - ein Versionswechsel landet im
+# Manifest und bleibt dort liegen. Das ist Absicht des Charts: ein
+# Geheimnisspeicher soll nicht unbeaufsichtigt durchrollen, weil er nach jedem
+# Neustart versiegelt ist und von Hand geoeffnet werden muss.
+#
+# Hier ist das Gegenteil richtig: direkt unter dieser Zeile wird ohnehin
+# gewartet und entsiegelt. Ohne diesen Schritt meldet das Target eine neue
+# Version, waehrend die alte weiterlaeuft - ein Sicherheitsupdate, das nur auf
+# dem Papier steht und beim Nachsehen keinen Verdacht erregt.
+#
+# Verglichen wird die Revision des LAUFENDEN Pods mit der, die das StatefulSet
+# ausrollen will. Nicht `currentRevision` gegen `updateRevision`: unter
+# OnDelete fuehrt der Controller `currentRevision` nie nach, die beiden stehen
+# also dauerhaft auseinander - ein Target, das daran haengt, loescht den Pod
+# bei JEDEM Lauf und ist nicht idempotent (Regel 7).
+POD_REV=$($K -n "${NS}" get pod "${POD}" -o jsonpath='{.metadata.labels.controller-revision-hash}' 2>/dev/null || true)
+UPD=$($K -n "${NS}" get sts openbao -o jsonpath='{.status.updateRevision}')
+if [ -n "${POD_REV}" ] && [ "${POD_REV}" != "${UPD}" ]; then
+  echo ">> ausstehende Revision durchsetzen (OnDelete: der Pod geht nicht von allein)"
+  # Die Daten liegen auf dem PVC, nicht im Pod - das Loeschen kostet sie nicht.
+  $K -n "${NS}" delete pod "${POD}" --wait=true >/dev/null
+  echo "   ${POD} neu, versiegelt - wird gleich geoeffnet"
+fi
 
 echo ">> warte, bis der Prozess antwortet"
 for i in $(seq 1 60); do
