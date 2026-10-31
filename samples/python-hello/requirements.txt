@@ -1,2 +1,12 @@
-flask==3.1.0
+# flask 3.1.3, nicht 3.1.0: der Sprung schliesst zwei Luecken derselben
+# 3.1-Linie.
+#   CVE-2025-47278 (3.1.1)  signiert Sessions mit dem letzten Fallback-
+#                           Schluessel statt mit dem aktuellen
+#   CVE-2026-27205 (3.1.3)  setzt bei manchen Zugriffen auf `session` kein
+#                           `Vary: Cookie`, womit ein Cache eine
+#                           nutzerspezifische Antwort weiterreichen kann
+# Beide treffen dieses Sample nicht - es benutzt keine Session. Gehoben wird
+# trotzdem, weil ein Smoke-Test zeigt, was die Plattform ausliefert. Patch-
+# Staende aendern am Verhalten nichts, geprueft ueber `cf push`.
+flask==3.1.3
 gunicorn==23.0.0

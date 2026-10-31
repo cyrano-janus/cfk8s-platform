@@ -6,7 +6,17 @@
 # einen Server-Buildpack (puma, thin, unicorn, passenger oder rackup) als
 # NICHT-optionales Mitglied. Ohne einen davon greift keine Ruby-Gruppe, und die
 # App fiele im ClusterBuilder auf ein späteres Buildpack durch.
+#
+# puma ~> 7.2 statt ~> 6.4, weil CVE-2026-47736 und CVE-2026-47737 die gesamte
+# Spanne 5.5.0 bis 7.2.0 betreffen — es gibt KEINEN Patch in der 6er-Linie,
+# 7.2.1 ist der erste saubere Stand. Beide Lücken sitzen im Parser für PROXY
+# Protocol v1, das dieses Sample nicht einschaltet (config/puma.rb setzt nur
+# den Port); erreichbar sind sie hier also nicht. Gehoben wird trotzdem: ein
+# Smoke-Test zeigt, was die Plattform ausliefert.
+#
+# Der Sprung setzt Ruby >= 3.0 voraus — das ist die Bedingung, die der Default
+# des mri-Buildpacks erfüllen muss. Genau das prüft der `cf push`.
 source "https://rubygems.org"
 
 gem "rack", "~> 3.1"
-gem "puma", "~> 6.4"
+gem "puma", "~> 7.2"

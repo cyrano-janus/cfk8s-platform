@@ -1448,12 +1448,48 @@ findet. Nach `kubectl delete pod --all --force --grace-period=0` in
 auch `calico-node`, und danach erholte sich der Cluster ohne weiteres Zutun:
 50 `Unknown` wurden zu 50 `Running`, CF eingeschlossen.
 
-**Nicht belegt — und das ist die offene Stelle dieses Befundes:** ob das
-Wegräumen der Leichen allein genügt hätte. Das ConfigMap war zwischenzeitlich
-gesetzt, als `calico-typha` hochkam. Die Gegenprobe verlangt einen zweiten
-Kaltstart mit nur diesem einen Schritt; bis dahin ist die Reihenfolge
-"Leichen weg, ConfigMap nie anlegen" eine Vermutung.
+**Nachgetragen am 2026-10-31 — die Gegenprobe ist gelaufen, und sie fiel
+negativ aus.** Ein zweiter Kaltstart, diesmal ohne jeden Umweg: das ConfigMap
+war nirgends im Cluster (`kubectl get cm -n tigera-operator` zeigt nur
+`istio-ca-crl`, `istio-ca-root-cert`, `kube-root-ca.crt`). 50 von 57 Pods tot.
+**Das Wegräumen der Leichen allein genügt nicht.** Zwei Dinge kamen dazu, und
+beide stehen jetzt im Target.
 
-**Vorschlag:** `make netz-reparieren-calico` räumt die Pods ohne Conditions
-weg — ohne ConfigMap, denn das ist hier nachweislich schädlich. Das Target
-trägt den Vermerk, dass seine Wirkung erst am nächsten Kaltstart gemessen ist.
+*Erstens, die Leichen sahen anders aus als beim ersten Mal.* Die Erkennung
+suchte Pods **ohne** Ready-Condition. Am kalten Wirt tragen sie eine — auf
+`False` mit `reason: ContainersNotReady` —, und jeder Container meldet
+`terminated` mit `reason: Unknown`. Der kubelet schweigt also nicht, er sagt
+etwas. `netz-reparieren-calico` meldete deshalb "0 entfernt" und lief danach in
+seinen Timeout. Die Erkennung prüft jetzt beide Formen.
+
+*Zweitens, und das ist die eigentliche Ursache:* Nach dem Wegräumen scheiterte
+`install-cni` weiter an `dial tcp 10.96.0.1:443: connect: connection refused`.
+Der Init-Container `ebpf-bootstrap` meldete dabei Erfolg:
+
+```
+init/calico-init_linux.go 126: Included kubernetes service (10.96.0.1:443)
+  and endpoints (172.18.0.12:6443) in the Nat Maps.
+$ kubectl get endpoints kubernetes     -> 172.18.0.11:6443
+$ docker inspect cfk8s-control-plane   -> 172.18.0.11
+$ docker inspect cfk8s-worker          -> 172.18.0.12
+```
+
+Er programmierte die NAT-Map auf den **Worker**. Die Adresse steht fest im
+DaemonSet, als `KUBERNETES_APISERVER_ENDPOINTS` am Init-Container, gesetzt vom
+`tigera-operator` — und Docker hatte sie beim Neustart neu vergeben. Damit ist
+die Wurzel **dieselbe wie bei #33**, eine veraltete Docker-Adresse; sie trifft
+unter Calico nur eine andere Stelle. Das korrigiert zu Beginn von
+`netz-reparieren-calico` jetzt ein eigener Schritt, mit dem Endpoints-Objekt
+als Quelle der Wahrheit. Sobald der Operator läuft, schreibt er die Variable
+ohnehin selbst — der Eingriff hält nur, bis das Richtige wieder greift.
+
+Danach erholte sich der Cluster ohne weiteres Zutun: 56 von 57 Pods laufend
+(der `nfsbroker` blieb stehen, siehe unten). Das Target läuft seither
+idempotent durch, die Gegenprobe im Skript — löst ein Dienstname in `nats-0`
+wieder auf? — ist grün. Der Vermerk im Target ist damit weggefallen.
+
+**Was sich daraus für #33 und #34 zusammen ergibt:** Beide Befunde sind
+derselbe Vorgang. Ein Neustart des Wirts vergibt Docker-Adressen neu, und was
+diese Adressen zwischengespeichert hat, zeigt danach ins Leere — unter Cilium
+die Endpunkt-Objekte, unter Calico eine Env im DaemonSet. Wer eine dritte CNI
+aufsetzt, sucht zuerst nach genau dieser Stelle.
